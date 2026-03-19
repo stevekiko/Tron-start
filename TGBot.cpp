@@ -124,6 +124,31 @@ void TGBot::sendMenu(long long chatId, const std::string& title) {
     requestAPI("sendMessage", payload);
 }
 
+void TGBot::sendStartMenu(long long chatId) {
+    nlohmann::json payload = {
+        {"chat_id", chatId},
+        {"text", "🎯 *请选择本次任务的碰撞难度 (以默认规则 profanity.txt 为基准):*\n\n_也支持直接在聊天框发送自定义完整地址串开始碰撞_"},
+        {"parse_mode", "Markdown"},
+        {"reply_markup", {
+            {"inline_keyboard", nlohmann::json::array({
+                nlohmann::json::array({
+                    {{"text", "🎲 匹配 6 位极品后缀 (极快)"}, {"callback_data", "run_0_6"}}
+                }),
+                nlohmann::json::array({
+                    {{"text", "🎲 匹配 7 位极品后缀 (较快)"}, {"callback_data", "run_0_7"}}
+                }),
+                nlohmann::json::array({
+                    {{"text", "💎 匹配 8 位极品后缀 (耗时)"}, {"callback_data", "run_0_8"}}
+                }),
+                nlohmann::json::array({
+                    {{"text", "🔥 前缀1位 + 后缀8位 (地狱爆率)"}, {"callback_data", "run_1_8"}}
+                })
+            })}
+        }}
+    };
+    requestAPI("sendMessage", payload);
+}
+
 void TGBot::answerCallback(const std::string& callbackQueryId) {
     nlohmann::json payload = {
         {"callback_query_id", callbackQueryId}

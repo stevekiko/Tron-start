@@ -415,7 +415,7 @@ int main(int argc, char **argv) {
                     }
                 }
             } else if (data == "cmd_start") {
-                g_tgBot->sendMenu(chatId);
+                g_tgBot->sendStartMenu(chatId);
             } else if (data.find("run_") == 0) {
                 int p = data[4] - '0';
                 int s = data[6] - '0';
