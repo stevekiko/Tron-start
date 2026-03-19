@@ -435,7 +435,20 @@ int main(int argc, char **argv) {
              } else {
                  std::ofstream out("profanity.txt", std::ios::trunc);
                  if (out.is_open()) {
-                     out << text << "\n";
+                     std::istringstream stream(text);
+                     std::string line;
+                     while (std::getline(stream, line)) {
+                         line.erase(line.find_last_not_of(" \n\r\t") + 1);
+                         line.erase(0, line.find_first_not_of(" \n\r\t"));
+                         if (line.empty()) continue;
+                         if (line.find("run_") == 0) continue; // safety filter
+                         if (line.size() < 34) {
+                             line.append(34 - line.size(), '1');
+                         } else if (line.size() > 34) {
+                             line = line.substr(0, 34);
+                         }
+                         out << line << "\n";
+                     }
                      out.close();
                      g_tgBot->sendMessage(chatId, "✅ *自定义规则表已更新覆写！*\n您现在可以点击菜单栏的【🚀 启动挂机】来应用您专属的长地址/多地址规则了。");
                      g_tgBot->sendStartMenu(chatId);
@@ -470,6 +483,12 @@ int main(int argc, char **argv) {
                 Mode runMode = Mode::matching(rule);
                 runMode.prefixCount = pre;
                 runMode.suffixCount = suf;
+                
+                if (runMode.matchingCount <= 0) {
+                    g_tgBot->sendMessage(std::stoll(g_tgChat), "⚠️ 内部错误: 匹配规则为空或全部短于有效长度，并发池启动失败。");
+                    g_isEngineRunning = false;
+                    continue;
+                }
                 g_dispatcher = std::make_shared<Dispatcher>(clContext, clProgram, runMode,
                      worksizeMax == 0 ? inverseSize * inverseMultiple : worksizeMax,
                      inverseSize, inverseMultiple, quitCount, outputFile);
