@@ -91,6 +91,7 @@ public:
   void addDevice(cl_device_id clDeviceId, const size_t worksizeLocal,
                  const size_t index);
   void run();
+  void stop();
 
 private:
   void init();

@@ -29,8 +29,33 @@
 #include "Mode.hpp"
 #include "help.hpp"
 #include "kernel_keccak.hpp"
+#include "kernel_keccak.hpp"
 #include "kernel_profanity.hpp"
 #include "kernel_sha256.hpp"
+
+#include "TGBot.hpp"
+#include <atomic>
+#include <thread>
+#include <mutex>
+#include <memory>
+
+std::mutex g_cmdMutex;
+bool g_hasNewCmd = false;
+std::string g_cmdRule;
+int g_cmdPrefix = 0;
+int g_cmdSuffix = 6;
+std::atomic<bool> g_isEngineRunning(false);
+std::shared_ptr<Dispatcher> g_dispatcher;
+TGBot* g_tgBot = nullptr;
+std::string g_tgChat;
+
+void tgNotify(const std::string& msg) {
+    if (g_tgBot && !g_tgChat.empty()) {
+        try {
+            g_tgBot->sendMessage(std::stoll(g_tgChat), msg);
+        } catch (...) {}
+    }
+}
 
 std::string readFile(const char *const szFilename) {
   std::ifstream in(szFilename, std::ios::in | std::ios::binary);
@@ -189,6 +214,11 @@ int main(int argc, char **argv) {
     argp.addSwitch('e', "suffix-count", suffixCount);
     argp.addSwitch('q', "quit-count", quitCount);
     argp.addMultiSwitch('s', "skip", vDeviceSkipIndex);
+    
+    std::string tgToken;
+    argp.addSwitch('T', "tg-token", tgToken);
+    argp.addSwitch('C', "tg-chat", g_tgChat);
+
 
     if (!argp.parse()) {
       std::cout << "错误：参数错误，请重试 :<" << std::endl;
@@ -357,15 +387,125 @@ int main(int argc, char **argv) {
 
     std::cout << std::endl;
 
-    Dispatcher d(clContext, clProgram, mode,
-                 worksizeMax == 0 ? inverseSize * inverseMultiple : worksizeMax,
-                 inverseSize, inverseMultiple, quitCount, outputFile);
+    if (!tgToken.empty()) {
+        std::cout << "TG Bot is starting... Console output will be minimized." << std::endl;
+        g_tgBot = new TGBot(tgToken, g_tgChat);
+        
+        g_tgBot->setCallbackHandler([&](const std::string& data, const std::string& cbId, long long chatId) {
+            if (data == "cmd_stop") {
+                std::lock_guard<std::mutex> lock(g_cmdMutex);
+                bool wasRunning = false;
+                if (g_dispatcher) {
+                    g_dispatcher->stop();
+                    wasRunning = true;
+                }
+                g_tgBot->sendMessage(chatId, wasRunning ? "🛑 强制刹车成功！" : "⚠️ 引擎目前并未启动。");
+                g_tgBot->sendMenu(chatId, "💻 *主菜单 (全闲置状态)*");
+            } else if (data == "cmd_speed") {
+                if (g_isEngineRunning) {
+                    std::ifstream sf("speed.txt");
+                    if(sf.is_open()){
+                        std::string sp; std::getline(sf, sp);
+                        g_tgBot->sendMessage(chatId, "⚡ 实时动能:\n`" + sp + "`");
+                    } else {
+                        g_tgBot->sendMessage(chatId, "⚡ 运行中，算力准备中...");
+                    }
+                } else {
+                    g_tgBot->sendMessage(chatId, "⚠️ 引擎未运转");
+                }
+            } else if (data == "cmd_result") {
+                if (!outputFile.empty()) {
+                    std::ifstream rf(outputFile);
+                    if(rf.is_open()){
+                        std::string content((std::istreambuf_iterator<char>(rf)), std::istreambuf_iterator<char>());
+                        if (content.length() > 3000) content = content.substr(content.length() - 3000);
+                        g_tgBot->sendMessage(chatId, "🏆 *爆号结果:*\n`" + content + "`");
+                    } else {
+                        g_tgBot->sendMessage(chatId, "尚未爆出结果。");
+                    }
+                }
+            } else if (data == "cmd_start") {
+                g_tgBot->sendMenu(chatId);
+            } else if (data.find("run_") == 0) {
+                int p = data[4] - '0';
+                int s = data[6] - '0';
+                std::lock_guard<std::mutex> lock(g_cmdMutex);
+                if (g_dispatcher) g_dispatcher->stop();
+                g_cmdRule = matchingInput;
+                g_cmdPrefix = p;
+                g_cmdSuffix = s;
+                g_hasNewCmd = true;
+                g_tgBot->sendMessage(chatId, "🚀 *已接受指令，正在部署算力...*");
+            }
+        });
+        
+        g_tgBot->setCommandHandler([&](const std::string& text, long long chatId){
+             std::lock_guard<std::mutex> lock(g_cmdMutex);
+             if (text == "/start" || text == "/menu") {
+                 g_tgBot->sendMenu(chatId);
+             } else {
+                 if (g_dispatcher) g_dispatcher->stop();
+                 g_cmdRule = text;
+                 g_cmdPrefix = 0;
+                 g_cmdSuffix = 0;
+                 g_hasNewCmd = true;
+                 g_tgBot->sendMessage(chatId, "🚀 *自定义地址模式已提交并进入队列！*");
+             }
+        });
 
-    for (auto &i : vDevices) {
-      d.addDevice(i, worksizeLocal, mDeviceIndex[i]);
+        g_tgBot->start();
+
+        while (true) {
+            bool runEngine = false;
+            std::string rule;
+            int pre = 0;
+            int suf = 0;
+            
+            {
+                std::lock_guard<std::mutex> lock(g_cmdMutex);
+                if (g_hasNewCmd) {
+                    runEngine = true;
+                    rule = g_cmdRule;
+                    pre = g_cmdPrefix;
+                    suf = g_cmdSuffix;
+                    g_hasNewCmd = false;
+                }
+            }
+
+            if (runEngine) {
+                g_isEngineRunning = true;
+                Mode runMode = Mode::matching(rule);
+                runMode.prefixCount = pre;
+                runMode.suffixCount = suf;
+                g_dispatcher = std::make_shared<Dispatcher>(clContext, clProgram, runMode,
+                     worksizeMax == 0 ? inverseSize * inverseMultiple : worksizeMax,
+                     inverseSize, inverseMultiple, quitCount, outputFile);
+                
+                for (auto &i : vDevices) {
+                    g_dispatcher->addDevice(i, worksizeLocal, mDeviceIndex[i]);
+                }
+                
+                g_tgBot->sendMessage(std::stoll(g_tgChat), "✅ *并发池已启动!*\n模式: `" + rule + "`\n前缀: " + std::to_string(pre) + " | 后缀: " + std::to_string(suf));
+                
+                g_dispatcher->run();
+                g_isEngineRunning = false;
+                g_dispatcher.reset();
+                g_tgBot->sendMessage(std::stoll(g_tgChat), "🛑 *本轮算力任务已结束或被用户终止*");
+            } else {
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            }
+        }
+    } else {
+        Dispatcher d(clContext, clProgram, mode,
+                     worksizeMax == 0 ? inverseSize * inverseMultiple : worksizeMax,
+                     inverseSize, inverseMultiple, quitCount, outputFile);
+
+        for (auto &i : vDevices) {
+          d.addDevice(i, worksizeLocal, mDeviceIndex[i]);
+        }
+        d.run();
     }
 
-    d.run();
     clReleaseContext(clContext);
     return 0;
   } catch (std::runtime_error &e) {

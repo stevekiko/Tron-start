@@ -1,0 +1,151 @@
+#!/bin/bash
+
+# ==========================================
+# Trongo - 极简全能启动向导 (开源发布版)
+# ==========================================
+
+BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+EXEC="$BASE_DIR/profanity.x64"
+TG_CONFIG="$BASE_DIR/tg_config.txt"
+SPEED_FILE="$BASE_DIR/speed.txt"
+RESULT_FILE="$BASE_DIR/result.txt"
+
+if [ ! -f "$EXEC" ]; then
+    echo "❌ 致命错误：找不到 $EXEC 核心引擎！"
+    echo "💡 提示：对于新部署的环境，请先在当前目录下执行 \`make\` 进行底层编译。"
+    exit 1
+fi
+
+stop_process() {
+    echo "🛑 正在切断底层的 Trongo 并发进程..."
+    if pgrep -f "profanity.x64" > /dev/null; then
+        pkill -9 -f "profanity.x64"
+        echo "✅ Trongo 已强制出栈并完全停止。"
+    else
+        echo "✅ 当前环境很干净，没有发现正在运行的 Trongo 任务。"
+    fi
+}
+
+start_process() {
+    if pgrep -f "profanity.x64" > /dev/null; then
+        echo "⚠️ 系统警告：检测到引擎已经在后台咆哮轰鸣了！"
+        echo "请先使用 'tron stop' 将其停止后，再重新配置发车。"
+        exit 1
+    fi
+
+    echo "=========================================="
+    echo "       🚀 Trongo 交互式启动部署向导"
+    echo "=========================================="
+    echo "请为本次算力集群选择运行模式："
+    echo " [1] 💻 纯本地静默挂机模式 (断网、纯单机、经典离线安全模式)"
+    echo " [2] 🤖 Telegram 机器人云托管模式 (全权由 TG 按键远控，随时随地查收益改规则)"
+    echo "=========================================="
+    read -p "请输入对应的数字 (1 或 2，默认回车选 1): " run_mode
+    run_mode=${run_mode:-1}
+
+    # ---------------- 模式 2: TG 云端托管 ----------------
+    if [[ "$run_mode" == "2" ]]; then
+        echo ""
+        echo "--- 🤖 Telegram Bot 驻留配置 ---"
+        TG_TOKEN=""
+        TG_CHAT_ID=""
+        if [ -f "$TG_CONFIG" ]; then
+            source "$TG_CONFIG"
+            echo "📄 读取到上一次的历史挂机配置 | Token: ${TG_TOKEN:0:10}... | Chat ID: $TG_CHAT_ID"
+            read -p "是否沿用此机器人身份继续发车？(Y/n, 默认 Y): " use_saved
+            use_saved=${use_saved:-Y}
+            if [[ "$use_saved" == "n" || "$use_saved" == "N" ]]; then
+                read -p "请输入新的 TG Bot Token (由 BotFather 获取): " TG_TOKEN
+                read -p "请输入接收通知的目标 Chat ID (个人或频道组 ID): " TG_CHAT_ID
+                echo "TG_TOKEN=\"$TG_TOKEN\"" > "$TG_CONFIG"
+                echo "TG_CHAT_ID=\"$TG_CHAT_ID\"" >> "$TG_CONFIG"
+            fi
+        else
+            echo "💡 提示：这是你首次配置 TG Bot 托管功能。"
+            read -p "👉 请输入机器人的 TG Bot Token: " TG_TOKEN
+            read -p "👉 请输入接收通知的 Chat ID (个人数字ID或群ID): " TG_CHAT_ID
+            echo "TG_TOKEN=\"$TG_TOKEN\"" > "$TG_CONFIG"
+            echo "TG_CHAT_ID=\"$TG_CHAT_ID\"" >> "$TG_CONFIG"
+        fi
+        
+        echo "⏳ 正在将控制权移交至 C++ 纯原生层 Telegram 模块守护进程..."
+        cd "$BASE_DIR"
+        nohup $EXEC --tg-token "$TG_TOKEN" --tg-chat "$TG_CHAT_ID" > /dev/null 2>&1 &
+        sleep 1
+        if pgrep -f "profanity.x64" > /dev/null; then
+            echo "✅ 注入成功！原生机器人已在云端上线！"
+            echo "📱 现在请立刻打开你的 Telegram 与 Bot 对话，随时使用菜单远程一键控盘开挖吧！"
+        else
+            echo "❌ 启动失败，请检查 Token 格式或防火墙网络连通性。"
+        fi
+        exit 0
+    fi
+
+    # ---------------- 模式 1: 纯本地并发挂机 ----------------
+    echo ""
+    echo "--- 🖥️  本地算力集群并发配置 ---"
+    read -p "请输入匹配模式集 (默认回车使用 profanity.txt): " match_rule
+    match_rule=${match_rule:-profanity.txt}
+    
+    if [[ "$match_rule" == "profanity.txt" ]]; then
+        read -p "🔥 请输入需要匹配的极品【前缀】位数 (填0代表要求随意，默认: 0): " prefix_cnt
+        prefix_cnt=${prefix_cnt:-0}
+        read -p "🔥 请输入需要匹配的极品【后缀】位数 (例如爱666后缀填3，默认: 6): " suffix_cnt
+        suffix_cnt=${suffix_cnt:-6}
+    else
+        echo "👉 你使用了自定义精准地址匹配串: $match_rule"
+        read -p "这是想要匹配的前缀还是后缀？(前缀填长度，当后缀用请填0，默认: 0): " prefix_cnt
+        prefix_cnt=${prefix_cnt:-0}
+        suffix_cnt=0
+    fi
+
+    rm -f "$SPEED_FILE"
+    echo "⏳ 正在分配显存开启动力..."
+    cd "$BASE_DIR"
+    nohup $EXEC --matching "$match_rule" --prefix-count "$prefix_cnt" --suffix-count "$suffix_cnt" --output "$RESULT_FILE" > /dev/null 2>&1 &
+    
+    sleep 2
+    if pgrep -f "profanity.x64" > /dev/null; then
+        echo "✅ 纯本地任务启动爆算成功！程序已脱离终端潜入后台静默运转。"
+        echo "👉 查看实时核爆速度:   tron -s"
+        echo "👉 查看大奖爆卡结果:   tron -r"
+    else
+        echo "❌ 启动失败！请检查 OpenCL 驱动依赖或权限。"
+    fi
+}
+
+case "$1" in
+    start|--start|-start)
+        start_process
+        ;;
+    stop|--stop|-stop)
+        stop_process
+        ;;
+    restart|--restart|-restart)
+        stop_process
+        echo "-----------------------------------"
+        start_process
+        ;;
+    -s|speed)
+        if [ -f "$SPEED_FILE" ]; then cat "$SPEED_FILE"; else echo "暂无速度数据，可能程序暂未发车。"; fi
+        ;;
+    -r|result)
+        if [ -f "$RESULT_FILE" ]; then 
+            echo "🏆 最近 10 个新鲜出炉的资产私钥:"
+            tail -n 10 "$RESULT_FILE"
+        else 
+            echo "暂无爆卡结果，让子弹再飞一会。"; 
+        fi
+        ;;
+    *)
+        echo "=== ✨ 波场极光 (Trongo) 启动管理器 ✨ ==="
+        echo "用法: tron [命令]"
+        echo "指令列表:"
+        echo "  start    🚀 启动引擎: 可选 [经典纯单机] 或 [高阶TG远程全托管]"
+        echo "  stop     🛑 紧急断电: 优雅停止服务器上所有的 Trongo 并发计算"
+        echo "  restart  🔄 重新发车: 一句话杀掉旧进程并让你重选配置"
+        echo "  -s       ⚡ 核心算力: 偷看当前集群显卡爆发的哈希速度 (H/s)"
+        echo "  -r       💰 盘点资产: 查看本地已经撞墙开奖的财富记事本"
+        echo "========================================"
+        ;;
+esac

