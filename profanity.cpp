@@ -48,6 +48,7 @@ std::atomic<bool> g_isEngineRunning(false);
 std::shared_ptr<Dispatcher> g_dispatcher;
 TGBot* g_tgBot = nullptr;
 std::string g_tgChat;
+std::string g_resultKey;  // AES-256 encryption password for result file
 
 void tgNotify(const std::string& msg) {
     if (g_tgBot && !g_tgChat.empty()) {
@@ -218,6 +219,7 @@ int main(int argc, char **argv) {
     std::string tgToken;
     argp.addSwitch('T', "tg-token", tgToken);
     argp.addSwitch('C', "tg-chat", g_tgChat);
+    argp.addSwitch('K', "result-key", g_resultKey);
 
 
     if (!argp.parse()) {

@@ -434,20 +434,93 @@ void Dispatcher::dispatch(Device &d) {
   OpenCLException::throwIfError("failed to set custom callback", res);
 }
 
+// Secure encrypted result write using openssl AES-256-CBC + PBKDF2
+// Format is 100% compatible with: openssl enc -d -aes-256-cbc -pbkdf2 -in result.txt
+static void encryptResultFile(const std::string& filePath, const std::string& password) {
+    std::string decTemp = filePath + ".dec.tmp";
+    std::string encTemp = filePath + ".enc.tmp";
+
+    // Step 1: If encrypted file already exists, decrypt it to temp
+    {
+        std::ifstream check(filePath, std::ios::binary);
+        if (check.good()) {
+            std::string decCmd = "openssl enc -d -aes-256-cbc -pbkdf2 -in \""
+                + filePath + "\" -out \"" + decTemp + "\" -pass stdin 2>/dev/null";
+            FILE* proc = popen(decCmd.c_str(), "w");
+            if (proc) {
+                fputs(password.c_str(), proc);
+                fputc('\n', proc);
+                pclose(proc);
+            }
+        }
+    }
+
+    // Step 2: Re-encrypt (decTemp now has plaintext, or is empty for first time)
+    std::string encCmd = "openssl enc -aes-256-cbc -pbkdf2 -salt -in \""
+        + decTemp + "\" -out \"" + encTemp + "\" -pass stdin 2>/dev/null";
+    FILE* proc = popen(encCmd.c_str(), "w");
+    if (proc) {
+        fputs(password.c_str(), proc);
+        fputc('\n', proc);
+        pclose(proc);
+    }
+
+    // Step 3: Swap files  
+    std::remove(decTemp.c_str());
+    std::remove(filePath.c_str());
+    std::rename(encTemp.c_str(), filePath.c_str());
+}
+
 static void writeResult(const std::string &privateKey,
                         const std::string &address,
                         const std::string &outputFile) {
   if (!outputFile.empty()) {
-    std::ofstream fileStream(outputFile, std::ios_base::app);
-    if (!fileStream.is_open()) {
-      std::cerr << "Error: failed to open result file " << outputFile << " :<"
-                << std::endl;
-      return;
-    }
+    // Get encryption key if set
+    extern std::string g_resultKey;
 
-    std::string content = privateKey + "," + address + "\n";
-    fileStream << content;
-    fileStream.close();
+    std::string newLine = privateKey + "," + address;
+
+    if (!g_resultKey.empty()) {
+      // Step A: Decrypt existing → temp plaintext file
+      std::string decTemp = outputFile + ".dec.tmp";
+      std::string encTemp = outputFile + ".enc.tmp";
+
+      std::ifstream check(outputFile, std::ios::binary);
+      if (check.good()) {
+        check.close();
+        std::string decCmd = "openssl enc -d -aes-256-cbc -pbkdf2 -in \""
+            + outputFile + "\" -out \"" + decTemp + "\" -pass stdin 2>/dev/null";
+        FILE* dproc = popen(decCmd.c_str(), "w");
+        if (dproc) { fputs(g_resultKey.c_str(), dproc); fputc('\n', dproc); pclose(dproc); }
+      }
+
+      // Step B: Append new line to plaintext temp
+      {
+        std::ofstream tmp(decTemp, std::ios::app);
+        tmp << newLine << "\n";
+      }
+
+      // Step C: Re-encrypt temp → encrypted output
+      std::string encCmd = "openssl enc -aes-256-cbc -pbkdf2 -salt -in \""
+          + decTemp + "\" -out \"" + encTemp + "\" -pass stdin 2>/dev/null";
+      FILE* eproc = popen(encCmd.c_str(), "w");
+      if (eproc) { fputs(g_resultKey.c_str(), eproc); fputc('\n', eproc); pclose(eproc); }
+
+      // Step D: Swap and delete plaintext
+      std::remove(decTemp.c_str());
+      std::remove(outputFile.c_str());
+      std::rename(encTemp.c_str(), outputFile.c_str());
+
+    } else {
+      // No encryption - plain text append (original behavior)
+      std::ofstream fileStream(outputFile, std::ios_base::app);
+      if (!fileStream.is_open()) {
+        std::cerr << "Error: failed to open result file " << outputFile << " :<" << std::endl;
+        return;
+      }
+      fileStream << newLine << "\n";
+      fileStream.close();
+    }
   }
 }
 

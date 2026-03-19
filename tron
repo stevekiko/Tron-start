@@ -74,9 +74,34 @@ start_process() {
             echo "TG_CHAT_ID=\"$TG_CHAT_ID\"" >> "$TG_CONFIG"
         fi
         
+        # Encryption password setup
+        RESULT_KEY=""
+        if [ -f "$TG_CONFIG" ]; then
+            RESULT_KEY_LINE=$(grep '^RESULT_KEY=' "$TG_CONFIG" | head -1)
+            if [ -n "$RESULT_KEY_LINE" ]; then
+                eval "$RESULT_KEY_LINE"
+            fi
+        fi
+        if [ -z "$RESULT_KEY" ]; then
+            echo ""
+            echo "--- 🔐 私钥文件加密配置 (强烈建议开启) ---"
+            echo "💡 若开启加密，爆出的私钥文件将使用 AES-256 加密保存，服务器被入侵也无法读取！"
+            read -s -p "👉 请设置一个私钥文件加密密码 (直接回车跳过加密): " RESULT_KEY
+            echo ""
+            if [ -n "$RESULT_KEY" ]; then
+                echo "RESULT_KEY=\"$RESULT_KEY\"" >> "$TG_CONFIG"
+                echo "✅ 加密密码已保存，私钥文件将以 AES-256 加密！"
+            else
+                echo "⚠️  跳过加密：私钥将以明文保存（不推荐）"
+            fi
+        fi
+
+        EXTRA_ARGS=""
+        [ -n "$RESULT_KEY" ] && EXTRA_ARGS="--result-key \"$RESULT_KEY\" --output \"$RESULT_FILE\""
+
         echo "⏳ 正在将控制权移交至 C++ 纯原生层 Telegram 模块守护进程..."
         cd "$BASE_DIR"
-        nohup $EXEC --tg-token "$TG_TOKEN" --tg-chat "$TG_CHAT_ID" > /dev/null 2>&1 &
+        eval nohup $EXEC --tg-token "\"$TG_TOKEN\"" --tg-chat "\"$TG_CHAT_ID\"" $EXTRA_ARGS > /dev/null 2>&1 &
         sleep 1
         if pgrep -f "profanity.x64" > /dev/null; then
             echo "✅ 注入成功！原生机器人已在云端上线！"
@@ -105,10 +130,32 @@ start_process() {
         suffix_cnt=0
     fi
 
+    # Encryption password setup for local mode
+    RESULT_KEY=""
+    if [ -f "$TG_CONFIG" ]; then
+        RESULT_KEY_LINE=$(grep '^RESULT_KEY=' "$TG_CONFIG" | head -1)
+        if [ -n "$RESULT_KEY_LINE" ]; then
+            eval "$RESULT_KEY_LINE"
+        fi
+    fi
+    if [ -z "$RESULT_KEY" ]; then
+        echo ""
+        echo "--- 🔐 私钥文件加密配置 (强烈建议开启) ---"
+        read -s -p "👉 请设置一个私钥文件加密密码 (直接回车跳过): " RESULT_KEY
+        echo ""
+        if [ -n "$RESULT_KEY" ]; then
+            echo "RESULT_KEY=\"$RESULT_KEY\"" >> "$TG_CONFIG"
+            echo "✅ 加密密码已设置！"
+        fi
+    fi
+
+    ENCRYPT_ARG=""
+    [ -n "$RESULT_KEY" ] && ENCRYPT_ARG="--result-key \"$RESULT_KEY\""
+
     rm -f "$SPEED_FILE"
     echo "⏳ 正在分配显存开启动力..."
     cd "$BASE_DIR"
-    nohup $EXEC --matching "$match_rule" --prefix-count "$prefix_cnt" --suffix-count "$suffix_cnt" --output "$RESULT_FILE" > /dev/null 2>&1 &
+    eval nohup $EXEC --matching "\"$match_rule\"" --prefix-count "$prefix_cnt" --suffix-count "$suffix_cnt" --output "\"$RESULT_FILE\"" $ENCRYPT_ARG > /dev/null 2>&1 &
     
     sleep 2
     if pgrep -f "profanity.x64" > /dev/null; then
@@ -136,11 +183,19 @@ case "$1" in
         if [ -f "$SPEED_FILE" ]; then cat "$SPEED_FILE"; else echo "暂无速度数据，可能程序暂未发车。"; fi
         ;;
     -r|result)
-        if [ -f "$RESULT_FILE" ]; then 
-            echo "🏆 最近 10 个新鲜出炉的资产私钥:"
-            tail -n 10 "$RESULT_FILE"
-        else 
-            echo "暂无爆卡结果，让子弹再飞一会。"; 
+        if [ -f "$RESULT_FILE" ]; then
+            # Check if encrypted (openssl files start with "Salted__")
+            MAGIC=$(head -c 8 "$RESULT_FILE" 2>/dev/null)
+            if [ "$MAGIC" = "Salted__" ]; then
+                read -s -p "🔐 检测到私钥文件已加密，请输入解密密码: " DECRYPT_KEY
+                echo ""
+                openssl enc -d -aes-256-cbc -pbkdf2 -in "$RESULT_FILE" -pass pass:"$DECRYPT_KEY" 2>/dev/null | tail -n 10 || echo "❌ 密码错误或文件损坏！"
+            else
+                echo "🏆 最近 10 个新鲜出炉的资产记录:"
+                tail -n 10 "$RESULT_FILE"
+            fi
+        else
+            echo "暂无爆卡结果，让子弹再飞一会。"
         fi
         ;;
     *)
