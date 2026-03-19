@@ -20,7 +20,7 @@
 我们首先需要安装 C++ 的编译环境和网络通信库：
 ```bash
 sudo apt-update
-sudo apt install -y build-essential libcurl4-openssl-dev
+sudo apt install -y git build-essential libcurl4-openssl-dev
 ```
 
 ### 第二步：安装显卡 (OpenCL) 计算环境
