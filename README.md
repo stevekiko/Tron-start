@@ -1,144 +1,144 @@
 # Trongo
 
-> GPU-accelerated TRON vanity address generator with native Telegram Bot control.
+> GPU 加速的 TRON 波场靓号地址生成器，原生集成 Telegram Bot 远程管控。
 
-Built on top of [profanity-tron](https://github.com/johguse/profanity), Trongo adds a native C++ Telegram Bot daemon for remote control and real-time notifications, an interactive CLI manager (`tron`), and AES-256 encrypted result storage — all without any external scripting languages.
-
----
-
-## Features
-
-- **GPU-accelerated address generation** — OpenCL-based parallel computation across multiple GPUs
-- **Native Telegram Bot** — Start/stop engine, monitor hash rate, and receive alerts via inline keyboard buttons, all from your phone
-- **Persistent keyboard** — Bottom shortcut buttons in Telegram chat; no need to type commands
-- **Remote rule configuration** — Switch vanity rule presets (digits / letters / all) directly in Telegram
-- **AES-256 result encryption** — Private keys written to disk are encrypted with `openssl enc -aes-256-cbc-pbkdf2`; even if the server is compromised the file is unreadable without your password
-- **Interactive CLI manager** — The `tron` command wraps every operation behind a guided wizard
-- **Dual execution modes** — Local silent mode or fully Telegram-managed cloud mode
-- **Zero scripting language dependencies** — Core bot logic is 100% native C++
+基于 [profanity-tron](https://github.com/johguse/profanity) 深度改造，新增原生 C++ Telegram Bot 守护进程实现远程控制与爆号通知、交互式 CLI 管理脚本 `tron`、以及 AES-256 私钥文件加密存储——零外部脚本语言依赖。
 
 ---
 
-## Requirements
+## 功能特性
 
-### Linux (recommended)
+- **GPU 并行加速** — OpenCL 多显卡并发计算，性能拉满
+- **原生 Telegram Bot** — 从手机一键启停引擎、查看算力、接收爆号推送，按钮交互无需打命令
+- **常驻快捷键盘** — Telegram 聊天底部永久驻留操作按钮，告别 `/start` 唤醒
+- **远程规则切换** — 直接在 Telegram 选择豹子数字 / 字母 / 全集规则库，一键切换
+- **AES-256 私钥加密** — 结果文件使用 `openssl enc -aes-256-cbc -pbkdf2` 加密写入，服务器入侵也无法读取
+- **交互式 CLI 向导** — `tron` 命令涵盖所有操作，向导式引导，零学习成本
+- **双执行模式** — 纯本地单机模式 或 Telegram 云端全托管模式可选
 
-| Dependency | Purpose | Install |
+---
+
+## 环境依赖
+
+### Linux（推荐部署平台）
+
+| 依赖 | 用途 | 安装命令 |
 |---|---|---|
-| `git` | Source code management | `apt install git` |
-| `g++`, `make` | C++ compilation toolchain | `apt install build-essential` |
-| `libcurl4-openssl-dev` | Telegram API communication | `apt install libcurl4-openssl-dev` |
-| `ocl-icd-opencl-dev` | OpenCL headers | `apt install ocl-icd-opencl-dev` |
-| `openssl` | Result file encryption | Pre-installed on all Debian/Ubuntu |
-| GPU OpenCL driver | NVIDIA or AMD compute | See § GPU Driver |
+| `git` | 代码拉取 | `apt install git` |
+| `g++`、`make` | C++ 编译工具链 | `apt install build-essential` |
+| `libcurl4-openssl-dev` | Telegram API 网络通信 | `apt install libcurl4-openssl-dev` |
+| `ocl-icd-opencl-dev` | OpenCL 头文件 | `apt install ocl-icd-opencl-dev` |
+| `openssl` | 私钥文件加密解密 | Debian/Ubuntu 预装 |
+| 显卡 OpenCL 驱动 | NVIDIA 或 AMD GPU 计算 | 见下方驱动安装章节 |
 
 ### macOS
 
-All required libraries ship with Xcode Command Line Tools and Homebrew. `libcurl` is provided by the system.
+Xcode Command Line Tools + Homebrew 可满足所有依赖。`libcurl` 由系统提供。
 
 ### Windows
 
-Build with Visual Studio. Configure `libcurl` headers and `.lib` manually in the project settings, then open `profanity.sln` and build in `Release x64`.
+使用 Visual Studio 构建，需自行配置 `libcurl` 的 include 路径和 `.lib` 链接，然后直接打开 `profanity.sln`，选择 `Release x64` 生成。
 
 ---
 
-## Deploy on Linux (Step-by-Step)
+## 部署教程（Linux 完整步骤）
 
-### 1. Install system dependencies
+### 第一步：安装系统依赖
 
 ```bash
 sudo apt update
 sudo apt install -y git build-essential libcurl4-openssl-dev ocl-icd-opencl-dev clinfo
 ```
 
-### 2. Install GPU OpenCL driver
+### 第二步：安装显卡 OpenCL 驱动
 
-**NVIDIA:**
+**NVIDIA 显卡：**
 
 ```bash
 sudo apt install -y nvidia-opencl-icd
 ```
 
-**AMD:**
+**AMD 显卡：**
 
 ```bash
 sudo apt install -y mesa-opencl-icd
 ```
 
-Verify detection:
+验证显卡是否被正确识别：
 
 ```bash
 clinfo | grep "Device Name"
 ```
 
-You should see your GPU listed. If no devices appear, re-check that the driver is installed correctly.
+输出中应看到你的 GPU 型号。若无输出，请检查驱动安装是否正确。
 
-### 3. Clone the repository
+### 第三步：克隆项目
 
 ```bash
 git clone https://github.com/stevekiko/Trongo.git
 cd Trongo
 ```
 
-### 4. Compile
+### 第四步：编译
 
 ```bash
 make
 ```
 
-This produces `profanity.x64` and automatically sets the `tron` script as executable.
+编译完成后当前目录会生成 `profanity.x64` 核心引擎，`tron` 脚本权限会自动设置好。
 
-### 5. Register `tron` as a global command
+### 第五步：注册全局命令
 
 ```bash
 sudo ln -sf $(pwd)/tron /usr/local/bin/tron
 ```
 
-After this step you can run `tron` from any directory.
+完成后在服务器**任意目录**均可直接使用 `tron` 命令。
 
 ---
 
-## Usage
+## 使用方式
 
-### Interactive wizard
+### 启动向导
 
 ```bash
 tron start
 ```
 
-The wizard will guide you through:
+向导将引导你完成以下配置：
 
-1. **Mode selection** — Local mode or Telegram Bot mode
-2. **Rule configuration** — Match pattern file, prefix count, suffix count
-3. **Encryption setup** — Optional AES-256 password for the result file (strongly recommended)
+1. **运行模式选择** — 纯本地模式 或 Telegram Bot 云托管模式
+2. **匹配规则配置** — 规则文件路径、前缀/后缀匹配位数
+3. **私钥加密设置** — 可选 AES-256 加密密码（强烈建议开启）
 
-### All commands
+### 全部命令速查
 
 ```
-tron start      Launch wizard (local or Telegram mode)
-tron stop       Gracefully stop all running engine processes
-tron restart    Stop + launch wizard again
-tron -s         Print current hash rate
-tron -r         View results (prompts for decryption password if encrypted)
+tron start      启动向导（本地或 Telegram 托管模式）
+tron stop       停止所有正在运行的挖号进程
+tron restart    停止 + 重新启动向导
+tron -s         查看当前实时哈希速率
+tron -r         查看爆号结果（若已加密则提示输入解密密码）
 ```
 
 ---
 
-## Telegram Bot Mode
+## Telegram Bot 模式
 
-### Prerequisites
+### 前置准备
 
-1. Create a bot via [@BotFather](https://t.me/BotFather) → get Bot Token
-2. Get your Chat ID — send any message to the bot, then visit:
+1. 在 Telegram 搜索 [@BotFather](https://t.me/BotFather)，创建专属机器人，获取 **Bot Token**
+2. 获取你的 **Chat ID** — 向机器人发任意消息，然后访问：
    `https://api.telegram.org/bot<TOKEN>/getUpdates`
+   在返回 JSON 中找到 `"id"` 字段即为 Chat ID
 
-### Activation
+### 启动
 
-Run `tron start`, select **mode 2**, and enter your Bot Token and Chat ID when prompted. The configuration is saved to `tg_config.txt` so subsequent starts reuse it automatically.
+执行 `tron start`，选择模式 **2**，按提示填入 Bot Token 和 Chat ID。配置会自动保存到 `tg_config.txt`，下次启动直接复用，无需重新配置。
 
-### Persistent keyboard buttons
+### 常驻快捷键盘
 
-Once the engine starts, the bot sends a permanent keyboard to the chat:
+引擎启动后，机器人会向聊天推送永久驻留键盘，关掉再开还在：
 
 ```
 ┌────────────────┬────────────────┐
@@ -150,125 +150,130 @@ Once the engine starts, the bot sends a permanent keyboard to the chat:
 └────────────────┴────────────────┘
 ```
 
-### Rule presets via Telegram
+### 远程规则切换
 
-Click **🎯 设置规则** to choose from:
+点击 **🎯 设置规则** 按钮，选择预置规则库：
 
-| Button | Rule applied |
+| 按钮 | 匹配内容 |
 |---|---|
-| 🔢 纯数字连号 | Suffix-repeated digits 1–9 |
-| 🔠 纯字母连号 | Suffix-repeated letters A–Z |
-| 👑 数字+字母全集 | All of the above combined |
+| 🔢 纯数字连号 | 后缀连续数字 1–9 各一套 |
+| 🔠 纯字母连号 | 后缀连续字母 A–Z 各一套 |
+| 👑 数字+字母全集 | 以上所有规则合并 |
 
-Alternatively, send any multi-line text directly to the bot to overwrite `profanity.txt` with custom rules (20-character TRON address prefix format).
+也可直接在聊天框发送多行文本（每行一条 20 字符前缀规则），机器人会自动覆写 `profanity.txt` 并弹出难度选择菜单。
 
 ---
 
-## Matching Rule File Format
+## 规则文件格式
 
-`profanity.txt` must contain one rule per line. Each line is either:
+`profanity.txt` 每行一条规则，支持两种格式：
 
-- A **20-character** prefix/suffix pattern string
-- A **34-character** full TRON address (`T` + 33 base58 characters) — the middle 14 characters are masked for fuzzy matching
+- **20 字符匹配串** — 直接用于前缀或后缀比对
+- **34 字符完整 TRON 地址** — 自动截取头尾 10 字符作为模糊匹配
 
-Example:
+示例：
 ```
 TTTTTTTTTT8888888888
 TTTTTTTTTTAAAAAAAAAA
-TXxxxxxxxxxxxxxxxxxx
+TUqEg3dzVEJNQSVW2HY98z5X8SBdhmao8D
 ```
 
 ---
 
-## Result File Encryption
+## 私钥文件加密说明
 
-If an encryption password is set during `tron start`, all found private keys are written in AES-256-CBC + PBKDF2 format (standard `openssl enc` format).
+开启加密后，每次爆出靓号，私钥会通过以下流程安全写入：
 
-**View results:**
+1. 解密现有结果文件（若已存在）→ 临时明文
+2. 追加新私钥条目  
+3. AES-256-CBC + PBKDF2 重新加密
+4. 删除临时明文，只保留密文
+
+**通过 `tron -r` 查看：**
 ```bash
 tron -r
-# → prompts: 🔐 请输入解密密码:
+# 🔐 检测到私钥文件已加密，请输入解密密码:
 ```
 
-**Manual decryption (no tron required):**
+**无需 tron，手动用 openssl 解密：**
 ```bash
-openssl enc -d -aes-256-cbc -pbkdf2 -in result.txt -pass pass:YOUR_PASSWORD
+openssl enc -d -aes-256-cbc -pbkdf2 -in result.txt -pass pass:你的密码
 ```
 
-When no password is configured, results are appended as plaintext CSV (`private_key,address`).
+未配置密码时，结果以明文 CSV 格式追加写入：`私钥,地址`
 
 ---
 
-## Advanced: Direct Engine Invocation
+## 进阶：直接调用底层引擎
 
-For scripting or cluster integration, `profanity.x64` can be called directly:
+如需集成到脚本或多机集群，可绕过 `tron` 直接调用 `profanity.x64`：
 
 ```bash
-# Local mode — match file, prefix 0, suffix 6 positions
+# 本地模式 — 规则文件 + 前缀0位 + 后缀6位
 ./profanity.x64 --matching profanity.txt --prefix-count 0 --suffix-count 6 --output result.txt
 
-# Local mode with encrypted output
-./profanity.x64 --matching profanity.txt --suffix-count 8 --output result.txt --result-key "your-password"
+# 本地模式 + 私钥加密输出
+./profanity.x64 --matching profanity.txt --suffix-count 8 --output result.txt --result-key "你的密码"
 
-# Single address fuzzy match
+# 单地址精准模糊匹配
 ./profanity.x64 --matching TUqEg3dzVEJNQSVW2HY98z5X8SBdhmao8D --prefix-count 4
 
-# Telegram daemon mode (no matching file required — rules set via bot)
+# Telegram 守护进程模式（引擎空转等待远程指令）
 ./profanity.x64 --tg-token "TOKEN" --tg-chat "CHAT_ID"
 
-# Telegram daemon with encrypted output
-./profanity.x64 --tg-token "TOKEN" --tg-chat "CHAT_ID" --result-key "your-password" --output result.txt
+# Telegram 守护进程 + 加密输出
+./profanity.x64 --tg-token "TOKEN" --tg-chat "CHAT_ID" --result-key "你的密码" --output result.txt
 ```
 
-Full parameter reference:
+完整参数列表：
 
 ```
--h / --help             Show help
--m / --matching         Rule file path or 34-char address
--o / --output           Result output file
--b / --prefix-count     Number of prefix positions to match (max 10)
--e / --suffix-count     Number of suffix positions to match (max 10)  
--w / --work             OpenCL local work size (default: 64)
--n / --no-cache         Disable OpenCL kernel binary cache
--T / --tg-token         Telegram Bot Token (enables daemon mode)
--C / --tg-chat          Telegram Chat ID for notifications
--K / --result-key       AES-256 encryption password for result file
+-h / --help             显示帮助
+-m / --matching         规则文件路径或 34 字符地址串
+-o / --output           结果输出文件路径
+-b / --prefix-count     前缀匹配位数（最大 10）
+-e / --suffix-count     后缀匹配位数（最大 10）
+-w / --work             OpenCL 本地工作组大小（默认 64）
+-n / --no-cache         禁用 OpenCL 内核二进制缓存
+-T / --tg-token         Telegram Bot Token（触发守护进程模式）
+-C / --tg-chat          Telegram 通知目标 Chat ID
+-K / --result-key       结果文件 AES-256 加密密码
 ```
 
 ---
 
-## Security
+## 安全说明
 
-- **Network access is scoped exclusively to `api.telegram.org`** — no other outbound connections are made. All legacy backdoor code (remote POST endpoints, debug seeds) has been removed.
-- **Private keys never appear in Telegram messages.** Notifications include the found address only.
-- **Result file encryption** uses AES-256-CBC with PBKDF2 key derivation. The password is never transmitted over any network.
-- **Randomness** — The original fixed-seed RNG vulnerability has been replaced with proper OS-level entropy.
+- **网络访问仅限 `api.telegram.org`** — 不存在任何其他出站连接，全部历史后门代码（远程 POST 上报、调试固定种子）已彻底清除
+- **私钥不会向 Telegram 发送** — Bot 推送通知仅包含爆出的靓号地址，私钥只写入本地文件
+- **结果文件加密** — 使用 AES-256-CBC + PBKDF2 标准格式，密码不经过任何网络传输
+- **随机数安全** — 已修复原版 profanity 存在的固定种子漏洞，现使用系统级熵源
 
 ---
 
-## Project Structure
+## 目录结构
 
 ```
 Trongo/
-├── profanity.cpp          Main entry point, CLI parsing, bot lifecycle
-├── Dispatcher.cpp/.hpp    OpenCL device management, GPU kernel dispatch
-├── TGBot.cpp/.hpp         Native C++ Telegram Bot (long-polling, keyboards)
-├── Mode.cpp/.hpp          Rule parsing and address matching logic
-├── ArgParser.hpp          Command-line argument parser
-├── SpeedSample.cpp/.hpp   Hash rate sampling
-├── json.hpp               nlohmann/json (single-header, bundled)
-├── kernel_profanity.hpp   Embedded OpenCL kernel (profanity)
-├── kernel_keccak.hpp      Embedded OpenCL kernel (Keccak-256)
-├── kernel_sha256.hpp      Embedded OpenCL kernel (SHA-256)
-├── tron                   Interactive CLI manager shell script
-├── profanity.txt          Default vanity rule file
+├── profanity.cpp          主入口：CLI 解析、生命周期管理
+├── Dispatcher.cpp/.hpp    OpenCL 设备管理与 GPU 内核调度
+├── TGBot.cpp/.hpp         原生 C++ Telegram Bot（长轮询、键盘、回调）
+├── Mode.cpp/.hpp          规则解析与地址匹配逻辑
+├── ArgParser.hpp          命令行参数解析器
+├── SpeedSample.cpp/.hpp   哈希速率采样
+├── json.hpp               nlohmann/json（单头文件，已打包）
+├── kernel_profanity.hpp   内嵌 OpenCL 内核（主引擎）
+├── kernel_keccak.hpp      内嵌 OpenCL 内核（Keccak-256）
+├── kernel_sha256.hpp      内嵌 OpenCL 内核（SHA-256）
+├── tron                   交互式 CLI 管理脚本
+├── profanity.txt          默认靓号匹配规则文件
 └── Makefile
 ```
 
 ---
 
-## License
+## 开源许可
 
-This project is licensed under the MIT License. See `LICENSE` for details.
+本项目遵循 MIT 协议开源。
 
-Original profanity engine by [johguse/profanity](https://github.com/johguse/profanity). Telegram integration, encryption, and CLI tooling by the Trongo contributors.
+底层算力引擎源自 [johguse/profanity](https://github.com/johguse/profanity)。Telegram 集成、加密存储及 CLI 工具由 stevekiko贡献。
