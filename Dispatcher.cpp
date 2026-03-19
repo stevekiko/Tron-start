@@ -494,7 +494,7 @@ printResult(cl_ulong4 seed, cl_ulong round, result r, cl_uchar score,
     writeResult(strPrivate, strPublicTron, outputFile);
   }
 
-  std::string hookCmd = "🎉 *爆卡啦!*\n\n私钥: `" + strPrivate + "`\n地址: `" + strPublicTron + "`\n_如不是您的预设模式请忽略此结果_";
+  std::string hookCmd = "🎉 *爆号成功！*\n\n💎 地址: `" + strPublicTron + "`\n\n🔐 私钥已安全保存至服务器本地文件，请用 `tron -r` 命令查看。";
   extern void tgNotify(const std::string& msg);
   tgNotify(hookCmd);
 }
