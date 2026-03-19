@@ -230,40 +230,30 @@ int main(int argc, char **argv) {
       return 0;
     }
 
-    if (matchingInput.empty()) {
-      std::cout << "错误：必须指定匹配文件 :<" << std::endl;
-      return 1;
+    if (tgToken.empty()) {
+      if (matchingInput.empty()) {
+        std::cout << "错误：必须指定匹配文件 :<" << std::endl;
+        return 1;
+      }
+
+      if (prefixCount < 0) {
+        prefixCount = 0;
+      }
+
+      if (prefixCount > 10) {
+        std::cout << "错误：前缀匹配的数量不能大于 10 :<" << std::endl;
+        return 1;
+      }
+
+      if (suffixCount < 0) {
+        suffixCount = 6;
+      }
+
+      if (suffixCount > 10) {
+        std::cout << "错误：后缀匹配的数量不能大于 10 :<" << std::endl;
+        return 1;
+      }
     }
-
-    if (prefixCount < 0) {
-      prefixCount = 0;
-    }
-
-    if (prefixCount > 10) {
-      std::cout << "错误：前缀匹配的数量不能大于 10 :<" << std::endl;
-      return 1;
-    }
-
-    if (suffixCount < 0) {
-      suffixCount = 6;
-    }
-
-    if (suffixCount > 10) {
-      std::cout << "错误：后缀匹配的数量不能大于 10 :<" << std::endl;
-      return 1;
-    }
-
-    Mode mode = Mode::matching(matchingInput);
-
-    if (mode.matchingCount <= 0) {
-      std::cout << "错误：请检查您的匹配文件以确保 "
-                   "路径和格式正确 :<"
-                << std::endl;
-      return 1;
-    }
-
-    mode.prefixCount = prefixCount;
-    mode.suffixCount = suffixCount;
 
     std::vector<cl_device_id> vFoundDevices = getAllDevices();
     std::vector<cl_device_id> vDevices;
@@ -496,6 +486,15 @@ int main(int argc, char **argv) {
             }
         }
     } else {
+        Mode mode = Mode::matching(matchingInput);
+        mode.prefixCount = prefixCount;
+        mode.suffixCount = suffixCount;
+
+        if (mode.matchingCount <= 0) {
+          std::cout << "错误：请检查您的匹配文件以确保 路径和格式正确 :<" << std::endl;
+          return 1;
+        }
+
         Dispatcher d(clContext, clProgram, mode,
                      worksizeMax == 0 ? inverseSize * inverseMultiple : worksizeMax,
                      inverseSize, inverseMultiple, quitCount, outputFile);
