@@ -17,6 +17,7 @@ all: $(SOURCES) $(EXECUTABLE)
 
 $(EXECUTABLE): $(OBJECTS)
 	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
+	@chmod +x tron 2>/dev/null || true
 
 .cpp.o:
 	$(CC) $(CFLAGS) $(CDEFINES) $< -o $@
