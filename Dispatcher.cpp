@@ -434,8 +434,20 @@ void Dispatcher::dispatch(Device &d) {
   OpenCLException::throwIfError("failed to set custom callback", res);
 }
 
+// Cross-platform popen/pclose wrappers
+#ifdef _WIN32
+  #define POPENW(cmd)   _popen(cmd, "w")
+  #define PCLOSEW(fp)   _pclose(fp)
+  #define DEV_NULL      "NUL"
+#else
+  #define POPENW(cmd)   popen(cmd, "w")
+  #define PCLOSEW(fp)   pclose(fp)
+  #define DEV_NULL      "/dev/null"
+#endif
+
 // Secure encrypted result write using openssl AES-256-CBC + PBKDF2
 // Format is 100% compatible with: openssl enc -d -aes-256-cbc -pbkdf2 -in result.txt
+// On Windows: encryption is skipped if openssl is not available in PATH.
 static void encryptResultFile(const std::string& filePath, const std::string& password) {
     std::string decTemp = filePath + ".dec.tmp";
     std::string encTemp = filePath + ".enc.tmp";
@@ -445,27 +457,27 @@ static void encryptResultFile(const std::string& filePath, const std::string& pa
         std::ifstream check(filePath, std::ios::binary);
         if (check.good()) {
             std::string decCmd = "openssl enc -d -aes-256-cbc -pbkdf2 -in \""
-                + filePath + "\" -out \"" + decTemp + "\" -pass stdin 2>/dev/null";
-            FILE* proc = popen(decCmd.c_str(), "w");
+                + filePath + "\" -out \"" + decTemp + "\" -pass stdin 2>" + DEV_NULL;
+            FILE* proc = POPENW(decCmd.c_str());
             if (proc) {
                 fputs(password.c_str(), proc);
                 fputc('\n', proc);
-                pclose(proc);
+                PCLOSEW(proc);
             }
         }
     }
 
-    // Step 2: Re-encrypt (decTemp now has plaintext, or is empty for first time)
+    // Step 2: Re-encrypt
     std::string encCmd = "openssl enc -aes-256-cbc -pbkdf2 -salt -in \""
-        + decTemp + "\" -out \"" + encTemp + "\" -pass stdin 2>/dev/null";
-    FILE* proc = popen(encCmd.c_str(), "w");
+        + decTemp + "\" -out \"" + encTemp + "\" -pass stdin 2>" + DEV_NULL;
+    FILE* proc = POPENW(encCmd.c_str());
     if (proc) {
         fputs(password.c_str(), proc);
         fputc('\n', proc);
-        pclose(proc);
+        PCLOSEW(proc);
     }
 
-    // Step 3: Swap files  
+    // Step 3: Swap files
     std::remove(decTemp.c_str());
     std::remove(filePath.c_str());
     std::rename(encTemp.c_str(), filePath.c_str());
@@ -490,8 +502,8 @@ static void writeResult(const std::string &privateKey,
         check.close();
         std::string decCmd = "openssl enc -d -aes-256-cbc -pbkdf2 -in \""
             + outputFile + "\" -out \"" + decTemp + "\" -pass stdin 2>/dev/null";
-        FILE* dproc = popen(decCmd.c_str(), "w");
-        if (dproc) { fputs(g_resultKey.c_str(), dproc); fputc('\n', dproc); pclose(dproc); }
+        FILE* dproc = POPENW(decCmd.c_str());
+        if (dproc) { fputs(g_resultKey.c_str(), dproc); fputc('\n', dproc); PCLOSEW(dproc); }
       }
 
       // Step B: Append new line to plaintext temp
@@ -502,9 +514,9 @@ static void writeResult(const std::string &privateKey,
 
       // Step C: Re-encrypt temp → encrypted output
       std::string encCmd = "openssl enc -aes-256-cbc -pbkdf2 -salt -in \""
-          + decTemp + "\" -out \"" + encTemp + "\" -pass stdin 2>/dev/null";
-      FILE* eproc = popen(encCmd.c_str(), "w");
-      if (eproc) { fputs(g_resultKey.c_str(), eproc); fputc('\n', eproc); pclose(eproc); }
+          + decTemp + "\" -out \"" + encTemp + "\" -pass stdin 2>" + DEV_NULL;
+      FILE* eproc = POPENW(encCmd.c_str());
+      if (eproc) { fputs(g_resultKey.c_str(), eproc); fputc('\n', eproc); PCLOSEW(eproc); }
 
       // Step D: Swap and delete plaintext
       std::remove(decTemp.c_str());

@@ -2,15 +2,21 @@ CC=g++
 CDEFINES=
 SOURCES=Dispatcher.cpp Mode.cpp precomp.cpp profanity.cpp SpeedSample.cpp TGBot.cpp
 OBJECTS=$(SOURCES:.cpp=.o)
-EXECUTABLE=profanity.x64
 
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
-	LDFLAGS=-framework OpenCL -lcurl -lpthread
-	CFLAGS=-c -std=c++11 -Wall -O2
+    EXECUTABLE=profanity.x64
+    LDFLAGS=-framework OpenCL -lcurl -lpthread
+    CFLAGS=-c -std=c++11 -Wall -O2
+else ifeq ($(OS),Windows_NT)
+    # MSYS2 / MinGW64 cross-compile on Windows
+    EXECUTABLE=profanity.exe
+    LDFLAGS=-s -lOpenCL -lcurl -lpthread -lws2_32
+    CFLAGS=-c -std=c++11 -Wall -O2
 else
-	LDFLAGS=-s -lOpenCL -lcurl -lpthread -mcmodel=large
-	CFLAGS=-c -std=c++11 -Wall -mmmx -O2 -mcmodel=large 
+    EXECUTABLE=profanity.x64
+    LDFLAGS=-s -lOpenCL -lcurl -lpthread -mcmodel=large
+    CFLAGS=-c -std=c++11 -Wall -mmmx -O2 -mcmodel=large
 endif
 
 all: $(SOURCES) $(EXECUTABLE)
@@ -23,5 +29,5 @@ $(EXECUTABLE): $(OBJECTS)
 	$(CC) $(CFLAGS) $(CDEFINES) $< -o $@
 
 clean:
-	rm -rf *.o
+	rm -rf *.o $(EXECUTABLE)
 
