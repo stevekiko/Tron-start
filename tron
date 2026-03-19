@@ -5,13 +5,12 @@
 # ==========================================
 
 # 解析脚本的绝对路径（支持软链接全局运行）
-SOURCE="${BASH_SOURCE[0]}"
-while [ -h "$SOURCE" ]; do 
-  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
-  SOURCE="$(readlink "$SOURCE")"
-  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
-done
-BASE_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+# 优先使用 readlink -f (Linux 原生支持)，在 Mac 下回退到常规 pwd
+if command -v readlink >/dev/null 2>&1 && [ "$(uname -s)" != "Darwin" ]; then
+    BASE_DIR=$(dirname $(readlink -f "$0"))
+else
+    BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+fi
 EXEC="$BASE_DIR/profanity.x64"
 TG_CONFIG="$BASE_DIR/tg_config.txt"
 SPEED_FILE="$BASE_DIR/speed.txt"
