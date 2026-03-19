@@ -23,7 +23,7 @@ if "%1"=="speed" goto :speed
 
 :usage
 echo.
-echo  ===  Trongo Windows 管理器  ===
+echo  ===  Tron-start Windows 管理器  ===
 echo.
 echo  用法：  trongo.bat [命令]
 echo.
@@ -61,7 +61,7 @@ if exist "%TG_CONFIG%" (
 )
 
 echo.
-echo  === Trongo Telegram Bot 配置向导 ===
+echo  === Tron-start Telegram Bot 配置向导 ===
 echo.
 
 if not "%TG_TOKEN%"=="" (
@@ -113,7 +113,7 @@ goto :eof
 
 :: ======== stop ========
 :stop
-echo  正在停止所有 Trongo 引擎进程...
+echo  正在停止所有 Tron-start 引擎进程...
 taskkill /f /im profanity.exe >nul 2>&1
 if not errorlevel 1 (
     echo  [OK] 已停止。

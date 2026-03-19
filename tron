@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# Trongo - 极简全能启动向导 (开源发布版)
+# Tron-start - 极简全能启动向导 (开源发布版)
 # ==========================================
 
 # 解析脚本的绝对路径（支持软链接全局运行）
@@ -23,12 +23,12 @@ if [ ! -f "$EXEC" ]; then
 fi
 
 stop_process() {
-    echo "🛑 正在切断底层的 Trongo 并发进程..."
+    echo "🛑 正在切断底层的 Tron-start 并发进程..."
     if pgrep -f "profanity.x64" > /dev/null; then
         pkill -9 -f "profanity.x64"
-        echo "✅ Trongo 已强制出栈并完全停止。"
+        echo "✅ Tron-start 已强制出栈并完全停止。"
     else
-        echo "✅ 当前环境很干净，没有发现正在运行的 Trongo 任务。"
+        echo "✅ 当前环境很干净，没有发现正在运行的 Tron-start 任务。"
     fi
 }
 
@@ -40,7 +40,7 @@ start_process() {
     fi
 
     echo "=========================================="
-    echo "       🚀 Trongo 交互式启动部署向导"
+    echo "       🚀 Tron-start 交互式启动部署向导"
     echo "=========================================="
     echo "请为本次算力集群选择运行模式："
     echo " [1] 💻 纯本地静默挂机模式 (断网、纯单机、经典离线安全模式)"
@@ -199,11 +199,11 @@ case "$1" in
         fi
         ;;
     *)
-        echo "=== ✨ 波场极光 (Trongo) 启动管理器 ✨ ==="
+        echo "=== ✨ 波场极光 (Tron-start) 启动管理器 ✨ ==="
         echo "用法: tron [命令]"
         echo "指令列表:"
         echo "  start    🚀 启动引擎: 可选 [经典纯单机] 或 [高阶TG远程全托管]"
-        echo "  stop     🛑 紧急断电: 优雅停止服务器上所有的 Trongo 并发计算"
+        echo "  stop     🛑 紧急断电: 优雅停止服务器上所有的 Tron-start 并发计算"
         echo "  restart  🔄 重新发车: 一句话杀掉旧进程并让你重选配置"
         echo "  -s       ⚡ 核心算力: 偷看当前集群显卡爆发的哈希速度 (H/s)"
         echo "  -r       💰 盘点资产: 查看本地已经撞墙开奖的财富记事本"

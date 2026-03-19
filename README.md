@@ -1,4 +1,4 @@
-# Trongo
+# Tron-start
 
 > GPU 加速的 TRON 波场靓号地址生成器，原生集成 Telegram Bot 远程管控。
 
@@ -57,8 +57,8 @@ pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-make \
 ### 第三步：克隆项目并编译
 
 ```bash
-git clone https://github.com/stevekiko/Trongo.git
-cd Trongo
+git clone https://github.com/stevekiko/Tron-start.git
+cd Tron-start
 make
 ```
 
@@ -123,8 +123,8 @@ clinfo | grep "Device Name"
 ### 第三步：克隆项目
 
 ```bash
-git clone https://github.com/stevekiko/Trongo.git
-cd Trongo
+git clone https://github.com/stevekiko/Tron-start.git
+cd Tron-start
 ```
 
 ### 第四步：编译
@@ -302,7 +302,7 @@ openssl enc -d -aes-256-cbc -pbkdf2 -in result.txt -pass pass:你的密码
 ## 目录结构
 
 ```
-Trongo/
+Tron-start/
 ├── profanity.cpp          主入口：CLI 解析、生命周期管理
 ├── Dispatcher.cpp/.hpp    OpenCL 设备管理与 GPU 内核调度
 ├── TGBot.cpp/.hpp         原生 C++ Telegram Bot（长轮询、键盘、回调）
