@@ -25,7 +25,7 @@ if "%1"=="speed" goto :speed
 echo.
 echo  ===  Tron-start Windows 管理器  ===
 echo.
-echo  用法：  trongo.bat [命令]
+echo  用法：  Tron-start.bat [命令]
 echo.
 echo  命令列表：
 echo    start   启动 Telegram Bot 守护进程（推荐，通过 TG 控制一切）
@@ -43,7 +43,7 @@ goto :eof
 :start
 tasklist /fi "imagename eq profanity.exe" 2>nul | find "profanity.exe" >nul
 if not errorlevel 1 (
-    echo [警告] 引擎已在后台运行！请先执行 trongo.bat stop。
+    echo [警告] 引擎已在后台运行！请先执行 Tron-start.bat stop。
     pause
     goto :eof
 )

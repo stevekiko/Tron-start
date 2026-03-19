@@ -45,7 +45,7 @@ void TGBot::start() {
     // Announce startup and show persistent keyboard
     if (!m_chatId.empty()) {
         sendPersistentKeyboard(std::stoll(m_chatId));
-        sendMenu(std::stoll(m_chatId), "🤖 *Trongo C++ 核心引擎已上线！*\n双线程驱动，原生控制面板已就绪。");
+        sendMenu(std::stoll(m_chatId), "🤖 *Tron-start C++ 核心引擎已上线！*\n双线程驱动，原生控制面板已就绪。");
     }
 }
 

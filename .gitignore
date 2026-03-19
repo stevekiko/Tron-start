@@ -4,3 +4,17 @@
 cache-opencl.*
 bin
 README_dev.md
+
+# Build outputs
+*.exe
+*.dll
+*.zip
+Release/
+Release-Full/
+dist/
+
+# Generated log/text files
+*.txt
+InstallationLog.txt
+result.txt
+profanity.txt

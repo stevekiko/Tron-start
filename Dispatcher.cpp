@@ -223,7 +223,7 @@ void Dispatcher::run() {
                "它是否与打印的私钥匹配。"
             << std::endl;
   std::cout << "  请确保您运行的程序下载 "
-               "自：https://github.com/stevekiko/Trongo"
+               "自：https://github.com/stevekiko/Tron-start"
             << std::endl;
   std::cout
       << "  并始终对地址进行多重签名以确保账户安全。 "

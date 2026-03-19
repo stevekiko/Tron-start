@@ -36,7 +36,7 @@ About:
 
   Profanity is a vanity address generator for tron: https://tron.network/
   The software is modified based on ethereum profanity: https://github.com/johguse/profanity
-  Please make sure the program you are running is download from: https://github.com/stevekiko/Trongo
+  Please make sure the program you are running is download from: https://github.com/stevekiko/Tron-start
   Author: telegram -> @enyccd
 
 安全警告 (Security Warning):

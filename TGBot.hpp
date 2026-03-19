@@ -19,7 +19,7 @@ public:
     void stop();
 
     void sendMessage(long long chatId, const std::string& text);
-    void sendMenu(long long chatId, const std::string& title = "💻 *Trongo C++ 原生控制面板*");
+    void sendMenu(long long chatId, const std::string& title = "💻 *Tron-start C++ 原生控制面板*");
     void sendStartMenu(long long chatId);
     void sendRuleMenu(long long chatId);
     void sendPersistentKeyboard(long long chatId);
