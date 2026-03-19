@@ -430,16 +430,18 @@ int main(int argc, char **argv) {
         });
         
         g_tgBot->setCommandHandler([&](const std::string& text, long long chatId){
-             std::lock_guard<std::mutex> lock(g_cmdMutex);
              if (text == "/start" || text == "/menu") {
                  g_tgBot->sendMenu(chatId);
              } else {
-                 if (g_dispatcher) g_dispatcher->stop();
-                 g_cmdRule = text;
-                 g_cmdPrefix = 0;
-                 g_cmdSuffix = 0;
-                 g_hasNewCmd = true;
-                 g_tgBot->sendMessage(chatId, "🚀 *自定义地址模式已提交并进入队列！*");
+                 std::ofstream out("profanity.txt", std::ios::trunc);
+                 if (out.is_open()) {
+                     out << text << "\n";
+                     out.close();
+                     g_tgBot->sendMessage(chatId, "✅ *自定义规则表已更新覆写！*\n您现在可以点击菜单栏的【🚀 启动挂机】来应用您专属的长地址/多地址规则了。");
+                     g_tgBot->sendStartMenu(chatId);
+                 } else {
+                     g_tgBot->sendMessage(chatId, "⚠️ 写入规则文件失败，请检查服务器权限。");
+                 }
              }
         });
 
