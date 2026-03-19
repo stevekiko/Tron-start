@@ -276,4 +276,4 @@ Trongo/
 
 本项目遵循 MIT 协议开源。
 
-底层算力引擎源自 [johguse/profanity](https://github.com/johguse/profanity)。Telegram 集成、加密存储及 CLI 工具由 stevekiko贡献。
+底层算力引擎源自 [johguse/profanity](https://github.com/johguse/profanity)。Telegram 集成、加密存储及 CLI 工具由 [stevekiko](https://github.com/stevekiko) 贡献。
