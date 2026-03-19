@@ -14,7 +14,7 @@ Release-Full/
 dist/
 
 # Generated log/text files
-*.txt
 InstallationLog.txt
 result.txt
-profanity.txt
+speed.txt
+daemon.log
