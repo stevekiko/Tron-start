@@ -112,11 +112,36 @@ void TGBot::sendMenu(long long chatId, const std::string& title) {
             {"inline_keyboard", nlohmann::json::array({
                 nlohmann::json::array({
                     {{"text", "🚀 启动挂机"}, {"callback_data", "cmd_start"}},
-                    {{"text", "🛑 紧急停止"}, {"callback_data", "cmd_stop"}}
+                    {{"text", "🎯 设置规则"}, {"callback_data", "cmd_rule"}}
                 }),
                 nlohmann::json::array({
                     {{"text", "⚡ 查算力"}, {"callback_data", "cmd_speed"}},
                     {{"text", "🏆 查结果"}, {"callback_data", "cmd_result"}}
+                }),
+                nlohmann::json::array({
+                    {{"text", "🛑 紧急停止"}, {"callback_data", "cmd_stop"}}
+                })
+            })}
+        }}
+    };
+    requestAPI("sendMessage", payload);
+}
+
+void TGBot::sendRuleMenu(long long chatId) {
+    nlohmann::json payload = {
+        {"chat_id", chatId},
+        {"text", "🎯 *请选择你想要的爆号号段/规则类型:*\n_选中后，程序会自动将底层规则库 profanity.txt 替换为你选中的豹子号格式!_\n"},
+        {"parse_mode", "Markdown"},
+        {"reply_markup", {
+            {"inline_keyboard", nlohmann::json::array({
+                nlohmann::json::array({
+                    {{"text", "🔢 纯数字连号 (1-9连击)"}, {"callback_data", "set_rule_num"}}
+                }),
+                nlohmann::json::array({
+                    {{"text", "🔠 纯字母连号 (A-Z连击)"}, {"callback_data", "set_rule_alpha"}}
+                }),
+                nlohmann::json::array({
+                    {{"text", "👑 数字+字母 全开打尽"}, {"callback_data", "set_rule_all"}}
                 })
             })}
         }}
