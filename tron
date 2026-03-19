@@ -4,7 +4,14 @@
 # Trongo - 极简全能启动向导 (开源发布版)
 # ==========================================
 
-BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# 解析脚本的绝对路径（支持软链接全局运行）
+SOURCE="${BASH_SOURCE[0]}"
+while [ -h "$SOURCE" ]; do 
+  DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ $SOURCE != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+BASE_DIR="$( cd -P "$( dirname "$SOURCE" )" >/dev/null 2>&1 && pwd )"
 EXEC="$BASE_DIR/profanity.x64"
 TG_CONFIG="$BASE_DIR/tg_config.txt"
 SPEED_FILE="$BASE_DIR/speed.txt"
