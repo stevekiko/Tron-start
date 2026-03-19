@@ -232,6 +232,49 @@ int main(int argc, char **argv) {
       return 0;
     }
 
+#ifdef _WIN32
+    if (tgToken.empty() && matchingInput.empty()) {
+        std::ifstream cfg("tg_config.txt");
+        if (cfg.is_open()) {
+            std::string line;
+            while(std::getline(cfg, line)) {
+                if (line.find("TG_TOKEN=") == 0) tgToken = line.substr(9);
+                if (line.find("TG_CHAT_ID=") == 0) g_tgChat = line.substr(11);
+                if (line.find("RESULT_KEY=") == 0) g_resultKey = line.substr(11);
+            }
+            cfg.close();
+        }
+        
+        if (tgToken.empty()) {
+            std::cout << "\n=== Tron-start 初始化向导 (Native C++) ===\n\n";
+            std::cout << "请输入 Telegram Bot Token (由 BotFather 获取): ";
+            std::getline(std::cin, tgToken);
+            std::cout << "请输入接收通知的 Chat ID: ";
+            std::getline(std::cin, g_tgChat);
+            std::cout << "设置私钥导出加密密码 (直接回车跳过): ";
+            std::getline(std::cin, g_resultKey);
+            
+            tgToken.erase(tgToken.find_last_not_of(" \n\r\t") + 1);
+            g_tgChat.erase(g_tgChat.find_last_not_of(" \n\r\t") + 1);
+            g_resultKey.erase(g_resultKey.find_last_not_of(" \n\r\t") + 1);
+
+            std::ofstream outCfg("tg_config.txt");
+            outCfg << "TG_TOKEN=" << tgToken << "\nTG_CHAT_ID=" << g_tgChat << "\n";
+            if (!g_resultKey.empty()) outCfg << "RESULT_KEY=" << g_resultKey << "\n";
+            outCfg.close();
+            std::cout << "\n[OK] 配置已保存至 tg_config.txt！\n\n";
+        }
+        
+        if (argc <= 1) {
+            std::cout << "[提示] 引擎即将在 3 秒后潜入后台静默运行...\n";
+            std::cout << "[提示] 请移步大驾至 Telegram，使用控制面板按钮进行交互操作！\n";
+            std::cout << "------------------------------------------\n";
+            std::this_thread::sleep_for(std::chrono::seconds(3));
+            FreeConsole();
+        }
+    }
+#endif
+
     if (tgToken.empty()) {
       if (matchingInput.empty()) {
         std::cout << "错误：必须指定匹配文件 :<" << std::endl;
