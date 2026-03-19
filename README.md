@@ -1,128 +1,108 @@
-# Tron Profanity (Sanitized & Secure Version)
+# Trongo: 波场极光 (Open Source & Secure)
 
 > **⚠️ 特别安全声明 (Security Notice)**
 >
-> 2025-12-23: 本代码库已由专门的安全流程进行 **彻底清洗 (Sanitized)**。
-> 我们移除了原作者遗留的所有潜在后门和安全隐患：
-> - **[移除]** 所有网络请求代码 (libcurl)，彻底切断联网能力。
-> - **[移除]** 所有后门接口 (postUrl)，防止私钥被盗。
-> - **[修复]** 随机数生成器 (RNG) 代码，移除了固定的调试种子，确保私钥随机性。
-> - **[移除]** 预编译的 `profanity.x64` 和 `Curl` 目录，确保无毒。
->
-> **现在的版本是纯净、离线且安全的。** 请放心在 Windows/Mac 上自行编译使用。
+> 2025-12-23: 本代码库已由专门的安全流程进行 **彻底清洗 (Sanitized)**，移除了原版附带的盗号后门。
+> 最新版本（v2.0）深度重构了系统架构：
+> - **[引入] C++ 原生 Telegram Bot 托管系统**：为了实现安全的云端多端操控，我们重新引入了 `libcurl`，**但仅限于向 `api.telegram.org` 通信**，绝不会向任何第三方不可信服务器发送私钥。全自动化长轮询，纯净无后门。
+> - **[新增] 一键傻瓜式向导管理器 (`tron`)**：告别繁琐的长串参数，支持一键拉起本地集群或托管至云端机器人。
+> - **[修复]** 剥离了固定的 Debug 种子器，强制使用真随机硬件种子，保证资产绝对安全。
 
 ---
 
-波场（TRON）靓号生成器，利用 `gpu` 进行加速。代码已净化，安全可靠 🔥
-此版本已完全汉化，并修复了 Windows 控制台的中文乱码问题。
+全新一代波场（TRON）靓号生成器，利用 `gpu` (OpenCL) 进行极速破解加速。代码全汉化、抗乱码、支持双擎并行。🔥🔥🔥
 
+## 🚀 极速部署 (Debian / Ubuntu / Linux)
 
-## 🚀 快速开始 (如何使用)
+### 1. 准备环境库
+除了编译必备环境外，本程序在 Linux 下依赖于 `libcurl`（用于 TG 通知协议）：
+```bash
+sudo apt update
+sudo apt install build-essential ocl-icd-opencl-dev clinfo libcurl4-openssl-dev
+```
 
-因为移除了所有预编译的二进制文件，您需要自己编译。
+### 2. 编译项目
+```bash
+# 获取源码后，在项目根目录一键编译：
+make
+```
 
-### Windows 用户 (推荐)
+---
 
-1.  **下载**: 将本项目代码下载到您的 Windows 电脑。
-2.  **准备环境**: 安装 Visual Studio (需包含 C++ 桌面开发组件)。
-3.  **编译**: 
-    - 双击打开 `profanity.sln`。
-    - 选择 `Release` 和 `x64` 模式。
-    - 点击菜单栏的 `生成 (Build)` -> `生成解决方案 (Build Solution)`。
-4.  **运行**:
-    - 在生成的目录中找到 `.exe` 文件。
-    - 打开命令行 (CMD 或 PowerShell)，运行：
-      ```powershell
-      .\profanity.exe --matching profanity.txt
-      ```
-    *（提示：程序已内置 Windows 控制台乱码修复，无需手动设置 `chcp 65001`）*
+## 🎮 玩法指北：使用交互式向导 (`tron`)
+
+编译成功后，我们强烈推荐抛弃旧版的原始长命令，直接使用项目内置的**极简交互式管家**。
+
+在项目目录中直接运行：
+```bash
+./tron start
+```
+
+### 模式一：💻 纯本地后台挂机 (离线党最爱)
+在向导中键入 `1`。程序会通过对话的方式让你设置：
+- 匹配前缀？匹配后缀？
+全部回答完毕后，引擎会自动脱离终端进入静默运转模式。
+*随时想看算力？请输入 `./tron speed`*
+*爆出结果了吗？请输入 `./tron result`*
+
+### 模式二：🤖 Telegram 云端机器人托管 (极客/服务器党最爱)
+在向导中键入 `2`。向导会要求你输入你在 TG 上申请的 **Bot Token** 和接收通知的 **Chat ID**。
+输入后，你就可以彻底合上电脑！
+- 手机打开 Telegram 发送指令，Bot 会弹出**图形化按钮菜单**。
+- 按下【🚀 启动挂机】，在聊天框直接调整配置，服务器瞬间爆转。
+- 按下【⚡ 查算力】，Bot 会将当前显卡的算力进度发送给你。
+- **一旦抢出极品靓号，Bot 会立刻将地址推送到你的手机！**
+
+---
+
+## 🏷 向导基础命令大全
+
+运行 `./tron` 即可呼出帮助面板：
+*   `./tron start`   - 发起一个新的任务向导 (支持换参数)
+*   `./tron stop`    - 紧急拉停，杀死所有后台的 Trongo 算力怪兽
+*   `./tron restart` - 旧任务作废，立刻重启一个新的向导
+*   `./tron -s`      - 查看当前引擎哈希速度
+*   `./tron -r`      - 读取已爆出的靓号记事本 (`result.txt`)
+
+---
+
+## 🖥 传统命令 (硬核原教旨主义者)
+
+如果你想把本程序集成进你的其他 Shell 脚本中，也可以直接暴露运行：
+
+```bash
+# 1. 基础用法 (读取 profanity.txt 规则，前缀1位，后缀8位)
+./profanity.x64 --matching profanity.txt --prefix-count 1 --suffix-count 8
+
+# 2. 指定单个长地址规则 (例如找 TUqE 开头)
+./profanity.x64 --matching TUqEg3dzVEJNQSVW2HY98z5X8SBdhmao8D --prefix-count 4 --suffix-count 0
+
+# 3. 结果保存到 result.txt 并跳过显卡设备 1
+./profanity.x64 --matching profanity.txt --output result.txt --skip 1
+```
+
+*(原版帮助文档详见 `./profanity.x64 --help`)*
+
+---
+
+## 🛡️ Windows 与 Mac 用户
+
+### Windows 用户 (Visual Studio)
+1. 安装 Visual Studio (包括 C++ 桌面开发)。
+2. 本项目已经重新引入 `libcurl`，如需在 Windows 下编译，请确保引入了 `libcurl` 相应的 `include` 目录与 `.lib` 静态链接库。
+3. 双击 `profanity.sln`，选择 `Release` -> `x64` -> `生成`。
 
 ### Mac 用户 (M-series / Intel)
-
-1.  **编译**:
-    在终端中运行：
-    ```bash
-    make
-    ```
-2.  **运行**:
-    ```bash
-    ./profanity.x64 --matching profanity.txt
-    ```
-    *(注：M4 等新款芯片可能会遇到 OpenCL 兼容性问题，建议使用 Windows 运行以获得最佳稳定性)*
-
----
-
-## 📖 命令介绍
-
+在 Mac 下因为框架自带网络库，直接输入 `make` 很大几率能开箱即用。
 ```bash
-Usage: ./profanity [OPTIONS]
-
-  Help:
-    --help              查看帮助信息
-
-  Modes with arguments:
-    --matching          指定匹配规则文件（如 profanity.txt）
-
-  Matching configuration:
-    --prefix-count      最少匹配前缀位数，默认 0
-    --suffix-count      最少匹配后缀位数，默认 6
-    --quit-count        匹配到多少个地址后退出，默认 0 (不退出)
-
-  Device control:
-    --skip              跳过指定索引的 GPU 设备
-
-  Output control:
-    --output            结果输出到文件
+make
+./tron start
 ```
-
-### 示例
-
-```bash
-# 1. 基础用法 (读取 profanity.txt 规则)
-./profanity --matching profanity.txt
-
-# 2. 也是匹配 profanity.txt，但只找前缀至少 1 位，后缀至少 8 位的
-./profanity --matching profanity.txt --prefix-count 1 --suffix-count 8
-
-# 3. 结果保存到 result.txt
-./profanity --matching profanity.txt --output result.txt
-
-# 4. 指定单个地址规则 (例如找 TUqE 开头的)
-./profanity --matching TUqEg3dzVEJNQSVW2HY98z5X8SBdhmao8D --prefix-count 4 --suffix-count 0
-```
-
-### 匹配规则 (profanity.txt)
-
-支持两种写法：
-1.  **掩码模式**: `TTTTTTTTTTZZZZZZZZZZ` (例如匹配 Z 结尾)
-2.  **地址模式**: 直接填通过特定规则生成的地址，程序会自动识别首尾。
-
----
-
-## 🛡️ 安全细节
-
-### 1. 移除了 Networking (联网)
-原代码中包含 `libcurl` 并有一个 `--post` 参数，可以将私钥发送到远程服务器。
-**现在的版本已移除所有相关代码。** 您可以搜索 `curl`、`http` 等关键词验证，结果应为空。
-
-### 2. 移除了 Insecure Seed (不安全种子)
-原代码在 `Dispatcher.cpp` 的 `createSeed` 函数中包含一段 `#ifdef PROFANITY_DEBUG` 代码，会把随机种子固定为 1。虽然默认不开启，但属于潜在风险。
-**现在的版本已移除该段代码**，强制使用 `std::random_device` 硬件随机数生成器。
-
-### 3. 依赖清理
-移除了 `Curl` 文件夹和所有相关的构建配置。
 
 ---
 
 ## 验证地址
-
 无论使用什么工具，生成的私钥务必进行匹配验证。
 验证地址：[https://secretscan.org/PrivateKeyTron](https://secretscan.org/PrivateKeyTron)
 
-> **再次提醒**: 本程序仅供学习交流。保护好您的私钥，不要截屏，不要通过网络传输。
-
----
-
-## 原作者信息 (参考)
-- 原项目地址: [profanity-tron](https://github.com/stevekiko/Trongo) (本版本已修改)
-- 原始以太坊版本: [profanity](https://github.com/johguse/profanity)
+> **声明**: 本程序仅供技术安全研究探讨。请妥善冷备份您的私钥，由于私钥泄露导致的任何资产损失作者不承担责任。项目源码基于 [johguse/profanity](https://github.com/johguse/profanity) 魔改进化。
