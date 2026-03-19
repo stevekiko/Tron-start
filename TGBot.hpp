@@ -22,6 +22,7 @@ public:
     void sendMenu(long long chatId, const std::string& title = "💻 *Trongo C++ 原生控制面板*");
     void sendStartMenu(long long chatId);
     void sendRuleMenu(long long chatId);
+    void sendPersistentKeyboard(long long chatId);
     void answerCallback(const std::string& callbackQueryId);
 
     void setCallbackHandler(CallbackHandler handler) { m_cbHandler = handler; }

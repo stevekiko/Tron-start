@@ -450,8 +450,40 @@ int main(int argc, char **argv) {
         });
         
         g_tgBot->setCommandHandler([&](const std::string& text, long long chatId){
-             if (text == "/start" || text == "/menu") {
+             // Map persistent keyboard buttons → existing commands
+             if (text == "/start" || text == "/menu" || text == "📋 主菜单") {
                  g_tgBot->sendMenu(chatId);
+             } else if (text == "🚀 启动挂机") {
+                 g_tgBot->sendStartMenu(chatId);
+             } else if (text == "🎯 设置规则") {
+                 g_tgBot->sendRuleMenu(chatId);
+             } else if (text == "⚡ 查算力") {
+                 if (g_isEngineRunning) {
+                     std::ifstream sf(std::string(BASE_DIR) + "/speed.txt");
+                     if (sf.is_open()) {
+                         std::string sp; std::getline(sf, sp);
+                         g_tgBot->sendMessage(chatId, "⚡ 实时动能:\n`" + sp + "`");
+                     } else {
+                         g_tgBot->sendMessage(chatId, "⚡ 运行中，算力准备中...");
+                     }
+                 } else {
+                     g_tgBot->sendMessage(chatId, "⚠️ 引擎未运转");
+                 }
+             } else if (text == "🏆 查结果") {
+                 std::ifstream rf("result.txt");
+                 if (rf.is_open()) {
+                     std::string content((std::istreambuf_iterator<char>(rf)), std::istreambuf_iterator<char>());
+                     if (content.empty()) content = "暂无结果";
+                     if (content.length() > 3000) content = content.substr(content.length() - 3000);
+                     g_tgBot->sendMessage(chatId, "🏆 *爆号结果:*\n`" + content + "`");
+                 } else {
+                     g_tgBot->sendMessage(chatId, "尚未爆出结果。");
+                 }
+             } else if (text == "🔴 紧急停止") {
+                 std::lock_guard<std::mutex> lock(g_cmdMutex);
+                 bool was = false;
+                 if (g_dispatcher) { g_dispatcher->stop(); was = true; }
+                 g_tgBot->sendMessage(chatId, was ? "🛑 强制刹车成功！" : "⚠️ 引擎目前并未启动。");
              } else {
                  std::ofstream out("profanity.txt", std::ios::trunc);
                  if (out.is_open()) {

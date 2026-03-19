@@ -42,8 +42,9 @@ void TGBot::start() {
     m_running = true;
     m_thread = std::thread(&TGBot::pollLoop, this);
     
-    // Announce startup
+    // Announce startup and show persistent keyboard
     if (!m_chatId.empty()) {
+        sendPersistentKeyboard(std::stoll(m_chatId));
         sendMenu(std::stoll(m_chatId), "🤖 *Trongo C++ 核心引擎已上线！*\n双线程驱动，原生控制面板已就绪。");
     }
 }
@@ -169,6 +170,33 @@ void TGBot::sendStartMenu(long long chatId) {
                     {{"text", "🔥 前缀1位 + 后缀8位 (地狱爆率)"}, {"callback_data", "run_1_8"}}
                 })
             })}
+        }}
+    };
+    requestAPI("sendMessage", payload);
+}
+
+void TGBot::sendPersistentKeyboard(long long chatId) {
+    nlohmann::json payload = {
+        {"chat_id", chatId},
+        {"text", "📢 *快捷键盘已激活！*\n点击下方按钟即可操作，无需手动输入命令。"},
+        {"parse_mode", "Markdown"},
+        {"reply_markup", {
+            {"keyboard", nlohmann::json::array({
+                nlohmann::json::array({
+                    {{"text", "🚀 启动挂机"}},
+                    {{"text", "🎯 设置规则"}}
+                }),
+                nlohmann::json::array({
+                    {{"text", "⚡ 查算力"}},
+                    {{"text", "🏆 查结果"}}
+                }),
+                nlohmann::json::array({
+                    {{"text", "🔴 紧急停止"}},
+                    {{"text", "📋 主菜单"}}
+                })
+            })},
+            {"resize_keyboard", true},
+            {"persistent", true}
         }}
     };
     requestAPI("sendMessage", payload);
