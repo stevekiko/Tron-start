@@ -459,7 +459,7 @@ int main(int argc, char **argv) {
                  g_tgBot->sendRuleMenu(chatId);
              } else if (text == "⚡ 查算力") {
                  if (g_isEngineRunning) {
-                     std::ifstream sf(std::string(BASE_DIR) + "/speed.txt");
+                     std::ifstream sf("speed.txt");
                      if (sf.is_open()) {
                          std::string sp; std::getline(sf, sp);
                          g_tgBot->sendMessage(chatId, "⚡ 实时动能:\n`" + sp + "`");
