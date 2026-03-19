@@ -158,37 +158,43 @@ void TGBot::answerCallback(const std::string& callbackQueryId) {
 
 void TGBot::pollLoop() {
     while (m_running) {
-        nlohmann::json payload = {
-            {"offset", m_offset},
-            {"timeout", 20}
-        };
-        nlohmann::json res = requestAPI("getUpdates", payload);
+        try {
+            nlohmann::json payload = {
+                {"offset", m_offset},
+                {"timeout", 20}
+            };
+            nlohmann::json res = requestAPI("getUpdates", payload);
 
-        if (res.is_object() && res.contains("result") && res["result"].is_array()) {
-            for (auto& upd : res["result"]) {
-                long long updateId = upd.value("update_id", 0LL);
-                m_offset = updateId + 1;
+            if (res.is_object() && res.contains("result") && res["result"].is_array()) {
+                for (auto& upd : res["result"]) {
+                    long long updateId = upd.value("update_id", 0LL);
+                    m_offset = updateId + 1;
 
-                if (upd.contains("callback_query")) {
-                    auto& cb = upd["callback_query"];
-                    std::string cbId = cb.value("id", "");
-                    std::string data = cb.value("data", "");
-                    long long chatId = cb["message"]["chat"].value("id", 0LL);
-                    
-                    answerCallback(cbId);
+                    if (upd.contains("callback_query")) {
+                        auto& cb = upd["callback_query"];
+                        std::string cbId = cb.value("id", "");
+                        std::string data = cb.value("data", "");
+                        long long chatId = cb["message"]["chat"].value("id", 0LL);
+                        
+                        answerCallback(cbId);
 
-                    if (m_cbHandler) {
-                        m_cbHandler(data, cbId, chatId);
-                    }
-                } else if (upd.contains("message") && upd["message"].contains("text")) {
-                    std::string text = upd["message"].value("text", "");
-                    long long chatId = upd["message"]["chat"].value("id", 0LL);
-                    
-                    if (m_cmdHandler) {
-                        m_cmdHandler(text, chatId);
+                        if (m_cbHandler) {
+                            m_cbHandler(data, cbId, chatId);
+                        }
+                    } else if (upd.contains("message") && upd["message"].contains("text")) {
+                        std::string text = upd["message"].value("text", "");
+                        long long chatId = upd["message"]["chat"].value("id", 0LL);
+                        
+                        if (m_cmdHandler) {
+                            m_cmdHandler(text, chatId);
+                        }
                     }
                 }
             }
+        } catch (std::exception &e) {
+            std::cout << "Polling Loop Exception: " << e.what() << std::endl;
+        } catch (...) {
+            std::cout << "Polling Loop Unknown Exception" << std::endl;
         }
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
     }

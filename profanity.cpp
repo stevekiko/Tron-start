@@ -421,7 +421,7 @@ int main(int argc, char **argv) {
                 int s = data[6] - '0';
                 std::lock_guard<std::mutex> lock(g_cmdMutex);
                 if (g_dispatcher) g_dispatcher->stop();
-                g_cmdRule = matchingInput;
+                g_cmdRule = "profanity.txt";  // FIX: Force default since matchingInput might be explicitly empty in daemon mode.
                 g_cmdPrefix = p;
                 g_cmdSuffix = s;
                 g_hasNewCmd = true;
@@ -446,10 +446,11 @@ int main(int argc, char **argv) {
         g_tgBot->start();
 
         while (true) {
-            bool runEngine = false;
-            std::string rule;
-            int pre = 0;
-            int suf = 0;
+            try {
+                bool runEngine = false;
+                std::string rule;
+                int pre = 0;
+                int suf = 0;
             
             {
                 std::lock_guard<std::mutex> lock(g_cmdMutex);
@@ -481,8 +482,16 @@ int main(int argc, char **argv) {
                 g_isEngineRunning = false;
                 g_dispatcher.reset();
                 g_tgBot->sendMessage(std::stoll(g_tgChat), "🛑 *本轮算力任务已结束或被用户终止*");
-            } else {
-                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                } else {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                }
+            } catch (std::exception &e) {
+                std::cout << "Engine loop exception: " << e.what() << std::endl;
+                if(g_tgBot) g_tgBot->sendMessage(std::stoll(g_tgChat), "⚠️ 内部错误: `" + std::string(e.what()) + "`");
+                std::this_thread::sleep_for(std::chrono::seconds(2));
+            } catch (...) {
+                std::cout << "Engine loop unknown exception" << std::endl;
+                std::this_thread::sleep_for(std::chrono::seconds(2));
             }
         }
     } else {
