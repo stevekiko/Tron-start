@@ -34,10 +34,12 @@
 #include "kernel_sha256.hpp"
 
 #include "TGBot.hpp"
+#include "ResultStore.hpp"
 #include <atomic>
 #include <thread>
 #include <mutex>
 #include <memory>
+#include <unistd.h>
 
 std::mutex g_cmdMutex;
 bool g_hasNewCmd = false;
@@ -48,7 +50,8 @@ std::atomic<bool> g_isEngineRunning(false);
 std::shared_ptr<Dispatcher> g_dispatcher;
 TGBot* g_tgBot = nullptr;
 std::string g_tgChat;
-std::string g_resultKey;  // AES-256 encryption password for result file
+std::string g_resultKey;       // SQLCipher key (PRAGMA key)
+ResultStore g_resultStore;     // global, opened in main() after CLI parse
 
 void tgNotify(const std::string& msg) {
     if (g_tgBot && !g_tgChat.empty()) {
@@ -56,6 +59,86 @@ void tgNotify(const std::string& msg) {
             g_tgBot->sendMessage(std::stoll(g_tgChat), msg);
         } catch (...) {}
     }
+}
+
+// "/path/to/result.txt" -> "/path/to/result.db".  Empty -> "result.db".
+static std::string deriveDbPath(const std::string& outputPath) {
+    if (outputPath.empty()) return "result.db";
+    size_t dot = outputPath.find_last_of('.');
+    size_t slash = outputPath.find_last_of('/');
+    if (dot != std::string::npos && (slash == std::string::npos || dot > slash)) {
+        return outputPath.substr(0, dot) + ".db";
+    }
+    return outputPath + ".db";
+}
+
+// One-time import of the legacy openssl-encrypted result.txt into the SQLCipher DB.
+// Caller must have g_resultStore already opened.  After successful migration the
+// legacy file is renamed to <path>.legacy.bak so this won't run twice.
+static bool migrateLegacyResult(const std::string& legacyPath, const std::string& key) {
+    std::ifstream check(legacyPath, std::ios::binary);
+    if (!check.good()) return true;  // nothing to migrate
+
+    char magic[8] = {0};
+    check.read(magic, 8);
+    bool isEncrypted = (check.gcount() == 8 && std::memcmp(magic, "Salted__", 8) == 0);
+    check.close();
+
+    std::string plaintext;
+    if (isEncrypted) {
+        if (key.empty()) {
+            std::cerr << "⚠️ 跳过迁移: " << legacyPath
+                      << " 已加密但未提供 --result-key" << std::endl;
+            return false;
+        }
+        char passPath[] = "/tmp/.tron_pass_XXXXXX";
+        int pfd = mkstemp(passPath);
+        if (pfd < 0) {
+            std::cerr << "⚠️ 迁移失败: 无法创建临时密码文件" << std::endl;
+            return false;
+        }
+        FILE* pf = fdopen(pfd, "w");
+        if (pf) { fputs(key.c_str(), pf); fclose(pf); }
+        std::string cmd = "openssl enc -d -aes-256-cbc -pbkdf2 -in \"" + legacyPath
+                        + "\" -pass file:" + std::string(passPath) + " 2>/dev/null";
+        FILE* p = popen(cmd.c_str(), "r");
+        if (p) {
+            char buf[4096];
+            while (fgets(buf, sizeof(buf), p)) plaintext += buf;
+            pclose(p);
+        }
+        std::remove(passPath);
+        if (plaintext.empty()) {
+            std::cerr << "⚠️ 迁移失败: 解密 " << legacyPath
+                      << " 返回空（--result-key 不匹配？）" << std::endl;
+            return false;
+        }
+    } else {
+        std::ifstream pf(legacyPath);
+        std::ostringstream oss;
+        oss << pf.rdbuf();
+        plaintext = oss.str();
+    }
+
+    std::istringstream iss(plaintext);
+    std::string line;
+    int count = 0;
+    while (std::getline(iss, line)) {
+        if (line.empty()) continue;
+        size_t comma = line.find(',');
+        if (comma == std::string::npos) continue;
+        std::string priv = line.substr(0, comma);
+        std::string addr = line.substr(comma + 1);
+        if (g_resultStore.insert(priv, addr, /*rule_pattern=*/"", 0, 0, 0)) count++;
+    }
+    std::fill(plaintext.begin(), plaintext.end(), '\0');
+
+    std::string backup = legacyPath + ".legacy.bak";
+    std::rename(legacyPath.c_str(), backup.c_str());
+
+    std::cout << "✅ 已迁移 " << count << " 条历史记录到 SQLCipher，原文件备份为 "
+              << backup << std::endl;
+    return true;
 }
 
 std::string readFile(const char *const szFilename) {
@@ -274,6 +357,23 @@ int main(int argc, char **argv) {
         }
     }
 #endif
+
+    // === ResultStore (SQLCipher) init + legacy migration ===
+    {
+      std::string dbPath = deriveDbPath(outputFile);
+      if (!g_resultStore.open(dbPath, g_resultKey)) {
+        std::cerr << "❌ 无法打开结果数据库 " << dbPath
+                  << ": " << g_resultStore.lastError() << std::endl;
+        std::cerr << "   提示：--result-key 必须与已有数据库的密码一致" << std::endl;
+        return 1;
+      }
+      std::cout << "📦 结果库: " << dbPath
+                << " (现有 " << g_resultStore.count() << " 条记录)" << std::endl;
+      // One-shot migration of legacy openssl-encrypted result.txt → SQLCipher.
+      if (!outputFile.empty()) {
+        migrateLegacyResult(outputFile, g_resultKey);
+      }
+    }
 
     if (tgToken.empty()) {
       if (matchingInput.empty()) {
@@ -517,86 +617,22 @@ int main(int argc, char **argv) {
                      g_tgBot->sendMessage(chatId, "⚠️ 引擎未运转");
                  }
              } else if (text == "🏆 查结果") {
-                 std::ifstream rf("result.txt", std::ios::binary);
-                 if (!rf.is_open()) {
-                     g_tgBot->sendMessage(chatId, "尚未爆出结果。");
+                 // Pull from SQLCipher; never include private keys in the broadcast.
+                 std::vector<ResultEntry> rows = g_resultStore.recent(10);
+                 int total = g_resultStore.count();
+                 if (rows.empty()) {
+                     g_tgBot->sendMessage(chatId, "暂无爆卡结果，让子弹再飞一会。");
                  } else {
-                     // Detect AES encryption (openssl Salted__ magic header)
-                     char magic[8] = {0};
-                     rf.read(magic, 8);
-                     bool isEncrypted = (rf.gcount() == 8 && std::memcmp(magic, "Salted__", 8) == 0);
-                     rf.close();
-
-                     std::string plaintext;
-                     bool decryptedOK = true;
-
-                     if (isEncrypted) {
-                         if (g_resultKey.empty()) {
-                             g_tgBot->sendMessage(chatId, "🔐 结果已加密，但 daemon 未配置 result-key，无法解密展示地址。");
-                             decryptedOK = false;
-                         } else {
-                             // Write password to a 0600 temp file, then decrypt via popen.
-                             // Avoids embedding password in argv (visible in ps).
-                             char passPath[] = "/tmp/.tron_pass_XXXXXX";
-                             int pfd = mkstemp(passPath);
-                             if (pfd < 0) {
-                                 g_tgBot->sendMessage(chatId, "⚠️ 无法创建解密临时文件");
-                                 decryptedOK = false;
-                             } else {
-                                 FILE* pf = fdopen(pfd, "w");
-                                 if (pf) {
-                                     fputs(g_resultKey.c_str(), pf);
-                                     fclose(pf);
-                                 }
-                                 std::string cmd = "openssl enc -d -aes-256-cbc -pbkdf2 -in result.txt -pass file:"
-                                     + std::string(passPath) + " 2>/dev/null";
-                                 FILE* p = popen(cmd.c_str(), "r");
-                                 if (p) {
-                                     char buf[4096];
-                                     while (fgets(buf, sizeof(buf), p)) plaintext += buf;
-                                     pclose(p);
-                                 }
-                                 std::remove(passPath);
-                                 if (plaintext.empty()) {
-                                     g_tgBot->sendMessage(chatId, "⚠️ 解密失败 — 请检查 daemon 的 --result-key 是否与文件密码一致");
-                                     decryptedOK = false;
-                                 }
-                             }
-                         }
-                     } else {
-                         std::ifstream pf("result.txt");
-                         std::ostringstream oss;
-                         oss << pf.rdbuf();
-                         plaintext = oss.str();
+                     std::string body;
+                     // recent() returns newest-first; reverse so list reads oldest-to-newest.
+                     for (auto it = rows.rbegin(); it != rows.rend(); ++it) {
+                         body += "#" + std::to_string(it->id) + "  " + it->address + "\n";
                      }
-
-                     if (decryptedOK) {
-                         // Extract addresses only — never broadcast private keys via Telegram.
-                         std::istringstream iss(plaintext);
-                         std::vector<std::string> addrs;
-                         std::string line;
-                         while (std::getline(iss, line)) {
-                             if (line.empty()) continue;
-                             size_t comma = line.find(',');
-                             addrs.push_back(comma != std::string::npos ? line.substr(comma + 1) : line);
-                         }
-                         if (addrs.empty()) {
-                             g_tgBot->sendMessage(chatId, "暂无结果。");
-                         } else {
-                             size_t start = addrs.size() > 10 ? addrs.size() - 10 : 0;
-                             std::string body;
-                             for (size_t i = start; i < addrs.size(); ++i) {
-                                 body += "[" + std::to_string(i - start + 1) + "] " + addrs[i] + "\n";
-                             }
-                             std::string lockTag = isEncrypted ? " 🔐" : "";
-                             g_tgBot->sendMessage(chatId,
-                                 "🏆 *最近 " + std::to_string(addrs.size() - start) + " 个爆号地址" + lockTag + ":*\n"
-                                 "`" + body + "`\n"
-                                 "_私钥仅在服务器，执行 `tron -r` 扫码导入_");
-                         }
-                         // Best-effort wipe of any decrypted plaintext from memory before drop.
-                         std::fill(plaintext.begin(), plaintext.end(), '\0');
-                     }
+                     g_tgBot->sendMessage(chatId,
+                         "🏆 *最近 " + std::to_string(rows.size()) + " 个爆号地址*"
+                         " (库内共 " + std::to_string(total) + " 条):\n"
+                         "`" + body + "`\n"
+                         "_私钥仅在服务器，执行 `tron -r <编号>` 扫码导入_");
                  }
              } else if (text == "🔴 紧急停止") {
                  std::lock_guard<std::mutex> lock(g_cmdMutex);

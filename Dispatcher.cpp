@@ -434,105 +434,26 @@ void Dispatcher::dispatch(Device &d) {
   OpenCLException::throwIfError("failed to set custom callback", res);
 }
 
-// Cross-platform popen/pclose wrappers
-#ifdef _WIN32
-  #define POPENW(cmd)   _popen(cmd, "w")
-  #define PCLOSEW(fp)   _pclose(fp)
-  #define DEV_NULL      "NUL"
-#else
-  #define POPENW(cmd)   popen(cmd, "w")
-  #define PCLOSEW(fp)   pclose(fp)
-  #define DEV_NULL      "/dev/null"
-#endif
+#include "ResultStore.hpp"
 
-// Secure encrypted result write using openssl AES-256-CBC + PBKDF2
-// Format is 100% compatible with: openssl enc -d -aes-256-cbc -pbkdf2 -in result.txt
-// On Windows: encryption is skipped if openssl is not available in PATH.
-static void encryptResultFile(const std::string& filePath, const std::string& password) {
-    std::string decTemp = filePath + ".dec.tmp";
-    std::string encTemp = filePath + ".enc.tmp";
-
-    // Step 1: If encrypted file already exists, decrypt it to temp
-    {
-        std::ifstream check(filePath, std::ios::binary);
-        if (check.good()) {
-            std::string decCmd = "openssl enc -d -aes-256-cbc -pbkdf2 -in \""
-                + filePath + "\" -out \"" + decTemp + "\" -pass stdin 2>" + DEV_NULL;
-            FILE* proc = POPENW(decCmd.c_str());
-            if (proc) {
-                fputs(password.c_str(), proc);
-                fputc('\n', proc);
-                PCLOSEW(proc);
-            }
-        }
-    }
-
-    // Step 2: Re-encrypt
-    std::string encCmd = "openssl enc -aes-256-cbc -pbkdf2 -salt -in \""
-        + decTemp + "\" -out \"" + encTemp + "\" -pass stdin 2>" + DEV_NULL;
-    FILE* proc = POPENW(encCmd.c_str());
-    if (proc) {
-        fputs(password.c_str(), proc);
-        fputc('\n', proc);
-        PCLOSEW(proc);
-    }
-
-    // Step 3: Swap files
-    std::remove(decTemp.c_str());
-    std::remove(filePath.c_str());
-    std::rename(encTemp.c_str(), filePath.c_str());
-}
+// Persisted via SQLCipher. See ResultStore.hpp / ResultStore.cpp.
+// Owned by profanity.cpp (extern below).
+extern ResultStore g_resultStore;
 
 static void writeResult(const std::string &privateKey,
                         const std::string &address,
-                        const std::string &outputFile) {
-  if (!outputFile.empty()) {
-    // Get encryption key if set
-    extern std::string g_resultKey;
-
-    std::string newLine = privateKey + "," + address;
-
-    if (!g_resultKey.empty()) {
-      // Step A: Decrypt existing → temp plaintext file
-      std::string decTemp = outputFile + ".dec.tmp";
-      std::string encTemp = outputFile + ".enc.tmp";
-
-      std::ifstream check(outputFile, std::ios::binary);
-      if (check.good()) {
-        check.close();
-        std::string decCmd = "openssl enc -d -aes-256-cbc -pbkdf2 -in \""
-            + outputFile + "\" -out \"" + decTemp + "\" -pass stdin 2>/dev/null";
-        FILE* dproc = POPENW(decCmd.c_str());
-        if (dproc) { fputs(g_resultKey.c_str(), dproc); fputc('\n', dproc); PCLOSEW(dproc); }
-      }
-
-      // Step B: Append new line to plaintext temp
-      {
-        std::ofstream tmp(decTemp, std::ios::app);
-        tmp << newLine << "\n";
-      }
-
-      // Step C: Re-encrypt temp → encrypted output
-      std::string encCmd = "openssl enc -aes-256-cbc -pbkdf2 -salt -in \""
-          + decTemp + "\" -out \"" + encTemp + "\" -pass stdin 2>" + DEV_NULL;
-      FILE* eproc = POPENW(encCmd.c_str());
-      if (eproc) { fputs(g_resultKey.c_str(), eproc); fputc('\n', eproc); PCLOSEW(eproc); }
-
-      // Step D: Swap and delete plaintext
-      std::remove(decTemp.c_str());
-      std::remove(outputFile.c_str());
-      std::rename(encTemp.c_str(), outputFile.c_str());
-
-    } else {
-      // No encryption - plain text append (original behavior)
-      std::ofstream fileStream(outputFile, std::ios_base::app);
-      if (!fileStream.is_open()) {
-        std::cerr << "Error: failed to open result file " << outputFile << " :<" << std::endl;
-        return;
-      }
-      fileStream << newLine << "\n";
-      fileStream.close();
-    }
+                        const std::string &outputFile,
+                        int prefixCount,
+                        int suffixCount,
+                        int elapsedSeconds) {
+  if (outputFile.empty()) return;
+  if (!g_resultStore.isOpen()) {
+    std::cerr << "❌ ResultStore 未初始化，丢弃记录: " << address << std::endl;
+    return;
+  }
+  if (!g_resultStore.insert(privateKey, address, /*rule_pattern=*/"",
+                            prefixCount, suffixCount, elapsedSeconds)) {
+    std::cerr << "❌ ResultStore.insert 失败: " << g_resultStore.lastError() << std::endl;
   }
 }
 
@@ -576,7 +497,10 @@ printResult(cl_ulong4 seed, cl_ulong round, result r, cl_uchar score,
             << std::endl;
 
   if (!outputFile.empty()) {
-    writeResult(strPrivate, strPublicTron, outputFile);
+    writeResult(strPrivate, strPublicTron, outputFile,
+                static_cast<int>(mode.prefixCount),
+                static_cast<int>(mode.suffixCount),
+                static_cast<int>(seconds));
   }
 
   std::string hookCmd = "🎉 *爆号成功！*\n\n💎 地址: `" + strPublicTron + "`\n\n🔐 私钥已安全保存至服务器本地文件，请用 `tron -r` 命令查看。";

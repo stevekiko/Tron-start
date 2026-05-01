@@ -16,5 +16,12 @@ dist/
 # Generated log/text files
 InstallationLog.txt
 result.txt
+result.txt.legacy.bak
+result.db
+result.db-journal
+result.db-wal
+result.db-shm
 speed.txt
 daemon.log
+
+.DS_Store

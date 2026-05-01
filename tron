@@ -15,6 +15,7 @@ EXEC="$BASE_DIR/profanity.x64"
 TG_CONFIG="$BASE_DIR/tg_config.txt"
 SPEED_FILE="$BASE_DIR/speed.txt"
 RESULT_FILE="$BASE_DIR/result.txt"
+RESULT_DB="$BASE_DIR/result.db"
 
 if [ ! -f "$EXEC" ]; then
     echo "❌ 致命错误：找不到 $EXEC 核心引擎！"
@@ -183,58 +184,93 @@ case "$1" in
         if [ -f "$SPEED_FILE" ]; then cat "$SPEED_FILE"; else echo "暂无速度数据，可能程序暂未发车。"; fi
         ;;
     -r|result)
-        if [ ! -f "$RESULT_FILE" ]; then
-            echo "暂无爆卡结果，让子弹再飞一会。"
+        if ! command -v sqlcipher >/dev/null 2>&1; then
+            echo "❌ 缺少 sqlcipher 命令。请: apt install sqlcipher"
+            exit 1
+        fi
+        if [ ! -f "$RESULT_DB" ]; then
+            if [ -f "$RESULT_FILE" ]; then
+                echo "⚠️  仍是旧版加密文件 (result.txt)。"
+                echo "   启动 daemon 一次以触发自动迁移到 SQLCipher，然后再用 tron -r。"
+            else
+                echo "暂无爆卡结果，让子弹再飞一会。"
+            fi
             exit 0
         fi
 
-        MAGIC=$(head -c 8 "$RESULT_FILE" 2>/dev/null)
-        if [ "$MAGIC" = "Salted__" ]; then
-            read -s -p "🔐 检测到私钥文件已加密，请输入解密密码: " DECRYPT_KEY
-            echo ""
-            CONTENT=$(openssl enc -d -aes-256-cbc -pbkdf2 -in "$RESULT_FILE" -pass pass:"$DECRYPT_KEY" 2>/dev/null)
-            if [ -z "$CONTENT" ]; then
-                echo "❌ 密码错误或文件损坏！"
-                exit 0
-            fi
-        else
-            CONTENT=$(cat "$RESULT_FILE")
+        # Read SQLCipher key from tg_config.txt
+        if [ -f "$TG_CONFIG" ]; then
+            DB_KEY=$(grep "^RESULT_KEY=" "$TG_CONFIG" | sed -E "s/^RESULT_KEY=\"?([^\"]*)\"?$/\1/")
         fi
+        if [ -z "$DB_KEY" ]; then
+            read -s -p "🔐 请输入数据库密码: " DB_KEY
+            echo ""
+        fi
+        # Escape single quotes for SQL string literal.
+        DB_KEY_ESC="${DB_KEY//\'/\'\'}"
 
-        # Last 10 entries into array
-        mapfile -t ENTRIES < <(printf '%s\n' "$CONTENT" | grep -v '^$' | tail -n 10)
-        TOTAL=${#ENTRIES[@]}
+        # Test the key + count rows.
+        TOTAL=$(sqlcipher "$RESULT_DB" "PRAGMA key='${DB_KEY_ESC}'; SELECT count(*) FROM results;" 2>/dev/null)
+        if [[ ! "$TOTAL" =~ ^[0-9]+$ ]]; then
+            echo "❌ 解锁数据库失败 — 密码错误或文件损坏。"
+            exit 1
+        fi
         if [ "$TOTAL" -eq 0 ]; then
             echo "暂无爆卡结果。"
             exit 0
         fi
 
-        echo "🏆 最近 $TOTAL 个爆号地址 (私钥已隐藏):"
-        for i in "${!ENTRIES[@]}"; do
-            ADDR="${ENTRIES[$i]#*,}"
-            printf "  [%2d] %s\n" $((i+1)) "$ADDR"
-        done
+        # Direct mode: tron -r N → QR for record id=N
+        DIRECT_ID="$2"
+        if [[ "$DIRECT_ID" =~ ^[0-9]+$ ]]; then
+            ROW=$(sqlcipher -separator $'\t' "$RESULT_DB" "PRAGMA key='${DB_KEY_ESC}'; SELECT private_key, address FROM results WHERE id = $DIRECT_ID;" 2>/dev/null)
+            if [ -z "$ROW" ]; then
+                echo "❌ 找不到记录 #$DIRECT_ID"
+                exit 1
+            fi
+            PRIV="${ROW%%$'\t'*}"
+            ADDR="${ROW#*$'\t'}"
+            echo "🔐 #$DIRECT_ID  $ADDR"
+            echo "📲 用 TronLink / imToken 等钱包扫码导入私钥："
+            printf '%s' "$PRIV" | qrencode -t UTF8 -m 1
+            echo "⚠️  扫描完成后建议执行 'clear' 清屏防止窥屏"
+            unset PRIV ROW DB_KEY DB_KEY_ESC
+            exit 0
+        fi
+
+        # Interactive mode: list last 10 + prompt for id.
+        echo "🏆 最近 10 个爆号 (库内共 $TOTAL 条，私钥已隐藏):"
+        sqlcipher -separator '|' "$RESULT_DB" \
+            "PRAGMA key='${DB_KEY_ESC}'; SELECT id, address FROM (SELECT id, address FROM results ORDER BY id DESC LIMIT 10) ORDER BY id ASC;" 2>/dev/null \
+            | while IFS='|' read -r ID ADDR; do
+                printf "  #%-4s %s\n" "$ID" "$ADDR"
+            done
 
         if ! command -v qrencode >/dev/null 2>&1; then
             echo ""
             echo "💡 安装 qrencode 可启用扫码导入私钥: apt install qrencode"
+            unset DB_KEY DB_KEY_ESC
             exit 0
         fi
 
         echo ""
-        read -p "📱 输入编号生成对应私钥二维码 (回车跳过): " IDX
-        if [[ "$IDX" =~ ^[0-9]+$ ]] && [ "$IDX" -ge 1 ] && [ "$IDX" -le "$TOTAL" ]; then
-            LINE="${ENTRIES[$((IDX-1))]}"
-            PRIV="${LINE%%,*}"
-            ADDR="${LINE#*,}"
-            echo ""
-            echo "🔐 地址: $ADDR"
-            echo "📲 用 TronLink / imToken 等钱包扫码导入私钥："
-            printf '%s' "$PRIV" | qrencode -t UTF8 -m 1
-            echo "⚠️  扫描完成后建议执行 'clear' 清屏防止窥屏"
-            unset PRIV LINE
+        read -p "📱 输入编号查看私钥二维码 (回车跳过): " IDX
+        if [[ "$IDX" =~ ^[0-9]+$ ]]; then
+            ROW=$(sqlcipher -separator $'\t' "$RESULT_DB" "PRAGMA key='${DB_KEY_ESC}'; SELECT private_key, address FROM results WHERE id = $IDX;" 2>/dev/null)
+            if [ -z "$ROW" ]; then
+                echo "❌ 找不到记录 #$IDX"
+            else
+                PRIV="${ROW%%$'\t'*}"
+                ADDR="${ROW#*$'\t'}"
+                echo ""
+                echo "🔐 #$IDX  $ADDR"
+                echo "📲 用 TronLink / imToken 等钱包扫码导入私钥："
+                printf '%s' "$PRIV" | qrencode -t UTF8 -m 1
+                echo "⚠️  扫描完成后建议执行 'clear' 清屏防止窥屏"
+                unset PRIV ROW
+            fi
         fi
-        unset CONTENT DECRYPT_KEY ENTRIES
+        unset DB_KEY DB_KEY_ESC
         ;;
     *)
         echo "=== ✨ 波场极光 (Tron-start) 启动管理器 ✨ ==="
