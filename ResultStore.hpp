@@ -36,6 +36,16 @@ public:
     bool getById(long long id, ResultEntry& out);
     int count();
 
+    // === config(key, value) — TG_TOKEN, TG_CHAT_ID, etc. ===
+    std::string getConfig(const std::string& key);
+    bool setConfig(const std::string& key, const std::string& value);
+
+    // === rules(pattern, ord) — TRON vanity matching patterns ===
+    std::vector<std::string> getRules();
+    int rulesCount();
+    // Atomically replace the entire rules table with the given patterns (DELETE + INSERT).
+    bool replaceRules(const std::vector<std::string>& patterns);
+
     const std::string& lastError() const { return m_lastError; }
 
 private:

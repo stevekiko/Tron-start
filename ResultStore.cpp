@@ -56,7 +56,17 @@ bool ResultStore::open(const std::string& path, const std::string& key) {
         "  elapsed_seconds INTEGER,"
         "  created_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))"
         ");"
-        "CREATE INDEX IF NOT EXISTS idx_results_id_desc ON results(id DESC);")) {
+        "CREATE INDEX IF NOT EXISTS idx_results_id_desc ON results(id DESC);"
+        "CREATE TABLE IF NOT EXISTS config ("
+        "  key TEXT PRIMARY KEY,"
+        "  value TEXT NOT NULL,"
+        "  updated_at INTEGER NOT NULL DEFAULT (strftime('%s','now'))"
+        ");"
+        "CREATE TABLE IF NOT EXISTS rules ("
+        "  id INTEGER PRIMARY KEY AUTOINCREMENT,"
+        "  pattern TEXT NOT NULL,"
+        "  ord INTEGER NOT NULL DEFAULT 0"
+        ");")) {
         close();
         return false;
     }
@@ -155,4 +165,91 @@ int ResultStore::count() {
     if (sqlite3_step(stmt) == SQLITE_ROW) n = sqlite3_column_int(stmt, 0);
     sqlite3_finalize(stmt);
     return n;
+}
+
+std::string ResultStore::getConfig(const std::string& key) {
+    std::string out;
+    if (!m_db) return out;
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(m_db, "SELECT value FROM config WHERE key=?;", -1, &stmt, nullptr) != SQLITE_OK)
+        return out;
+    sqlite3_bind_text(stmt, 1, key.c_str(), -1, SQLITE_TRANSIENT);
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        const unsigned char* v = sqlite3_column_text(stmt, 0);
+        if (v) out = (const char*)v;
+    }
+    sqlite3_finalize(stmt);
+    return out;
+}
+
+bool ResultStore::setConfig(const std::string& key, const std::string& value) {
+    if (!m_db) return false;
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql =
+        "INSERT INTO config(key, value, updated_at) VALUES(?, ?, strftime('%s','now')) "
+        "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=strftime('%s','now');";
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        m_lastError = sqlite3_errmsg(m_db);
+        return false;
+    }
+    sqlite3_bind_text(stmt, 1, key.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, value.c_str(), -1, SQLITE_TRANSIENT);
+    bool ok = (sqlite3_step(stmt) == SQLITE_DONE);
+    if (!ok) m_lastError = sqlite3_errmsg(m_db);
+    sqlite3_finalize(stmt);
+    return ok;
+}
+
+std::vector<std::string> ResultStore::getRules() {
+    std::vector<std::string> out;
+    if (!m_db) return out;
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(m_db, "SELECT pattern FROM rules ORDER BY ord ASC, id ASC;", -1, &stmt, nullptr) != SQLITE_OK)
+        return out;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        const unsigned char* v = sqlite3_column_text(stmt, 0);
+        if (v) out.emplace_back((const char*)v);
+    }
+    sqlite3_finalize(stmt);
+    return out;
+}
+
+int ResultStore::rulesCount() {
+    if (!m_db) return 0;
+    sqlite3_stmt* stmt = nullptr;
+    if (sqlite3_prepare_v2(m_db, "SELECT count(*) FROM rules;", -1, &stmt, nullptr) != SQLITE_OK)
+        return 0;
+    int n = 0;
+    if (sqlite3_step(stmt) == SQLITE_ROW) n = sqlite3_column_int(stmt, 0);
+    sqlite3_finalize(stmt);
+    return n;
+}
+
+bool ResultStore::replaceRules(const std::vector<std::string>& patterns) {
+    if (!m_db) return false;
+    if (!exec("BEGIN IMMEDIATE;")) return false;
+    if (!exec("DELETE FROM rules;")) { exec("ROLLBACK;"); return false; }
+    sqlite3_stmt* stmt = nullptr;
+    const char* sql = "INSERT INTO rules(pattern, ord) VALUES(?, ?);";
+    if (sqlite3_prepare_v2(m_db, sql, -1, &stmt, nullptr) != SQLITE_OK) {
+        m_lastError = sqlite3_errmsg(m_db);
+        exec("ROLLBACK;");
+        return false;
+    }
+    int ord = 0;
+    for (const auto& p : patterns) {
+        if (p.empty()) continue;
+        sqlite3_reset(stmt);
+        sqlite3_clear_bindings(stmt);
+        sqlite3_bind_text(stmt, 1, p.c_str(), -1, SQLITE_TRANSIENT);
+        sqlite3_bind_int(stmt, 2, ord++);
+        if (sqlite3_step(stmt) != SQLITE_DONE) {
+            m_lastError = sqlite3_errmsg(m_db);
+            sqlite3_finalize(stmt);
+            exec("ROLLBACK;");
+            return false;
+        }
+    }
+    sqlite3_finalize(stmt);
+    return exec("COMMIT;");
 }

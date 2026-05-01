@@ -40,6 +40,7 @@
 #include <mutex>
 #include <memory>
 #include <unistd.h>
+#include <sys/stat.h>
 
 std::mutex g_cmdMutex;
 bool g_hasNewCmd = false;
@@ -138,6 +139,98 @@ static bool migrateLegacyResult(const std::string& legacyPath, const std::string
 
     std::cout << "✅ 已迁移 " << count << " 条历史记录到 SQLCipher，原文件备份为 "
               << backup << std::endl;
+    return true;
+}
+
+// One-shot import of tg_config.txt → DB config table.
+// RESULT_KEY in the file is intentionally NOT migrated — it must stay in the
+// bootstrap file because it's the SQLCipher key itself (chicken-and-egg).
+static void migrateLegacyTgConfig(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) return;
+    std::string line;
+    int migrated = 0;
+    bool kept_result_key = false;
+    std::string kept_line;
+    while (std::getline(f, line)) {
+        // Strip CR / surrounding whitespace
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        size_t eq = line.find('=');
+        if (eq == std::string::npos) continue;
+        std::string key = line.substr(0, eq);
+        std::string val = line.substr(eq + 1);
+        // Strip optional surrounding double quotes
+        if (val.size() >= 2 && val.front() == '"' && val.back() == '"')
+            val = val.substr(1, val.size() - 2);
+        if (key == "TG_TOKEN" || key == "TG_CHAT_ID") {
+            // Only migrate if not already in DB (CLI overrides win on subsequent starts).
+            if (g_resultStore.getConfig(key).empty()) {
+                if (g_resultStore.setConfig(key, val)) migrated++;
+            }
+        } else if (key == "RESULT_KEY") {
+            kept_result_key = true;
+            kept_line = line;
+        }
+    }
+    f.close();
+    if (migrated == 0) return;  // nothing changed → leave file alone
+
+    // Rewrite tg_config.txt to keep only RESULT_KEY (bootstrap) — or delete it
+    // entirely if RESULT_KEY wasn't present.
+    if (kept_result_key) {
+        std::ofstream out(path, std::ios::trunc);
+        out << "# Bootstrap key for SQLCipher.  Other config is now in result.db.\n";
+        out << kept_line << "\n";
+        out.close();
+        // Tighten permissions: this file IS the master key.
+        chmod(path.c_str(), 0600);
+        std::cout << "✅ 已迁移 " << migrated << " 个 TG 配置项到 SQLCipher。"
+                  << path << " 已收缩为 1 行 RESULT_KEY (mode 600)" << std::endl;
+    } else {
+        std::remove(path.c_str());
+        std::cout << "✅ 已迁移 " << migrated << " 个 TG 配置项到 SQLCipher，并删除空 "
+                  << path << std::endl;
+    }
+}
+
+// One-shot import of profanity.txt → DB rules table.  After successful migration
+// the legacy file is renamed to profanity.txt.legacy.bak.
+static void migrateLegacyProfanity(const std::string& path) {
+    if (g_resultStore.rulesCount() > 0) return;  // already populated
+    std::ifstream f(path);
+    if (!f.is_open()) return;
+    std::vector<std::string> patterns;
+    std::string line;
+    while (std::getline(f, line)) {
+        if (!line.empty() && line.back() == '\r') line.pop_back();
+        // trim whitespace
+        size_t a = line.find_first_not_of(" \t");
+        size_t b = line.find_last_not_of(" \t");
+        if (a == std::string::npos) continue;
+        line = line.substr(a, b - a + 1);
+        if (line.empty()) continue;
+        patterns.push_back(line);
+    }
+    f.close();
+    if (patterns.empty()) return;
+    if (!g_resultStore.replaceRules(patterns)) {
+        std::cerr << "⚠️ 迁移规则失败: " << g_resultStore.lastError() << std::endl;
+        return;
+    }
+    std::string backup = path + ".legacy.bak";
+    std::rename(path.c_str(), backup.c_str());
+    std::cout << "✅ 已迁移 " << patterns.size() << " 条规则到 SQLCipher，原文件备份为 "
+              << backup << std::endl;
+}
+
+// Write the active rules from the DB into a derived profanity.txt that the
+// engine consumes.  Called after any rule mutation (set_rule_*, custom text).
+static bool writeProfanityTxtFromDb(const std::string& path = "profanity.txt") {
+    auto patterns = g_resultStore.getRules();
+    std::ofstream out(path, std::ios::trunc);
+    if (!out.is_open()) return false;
+    for (const auto& p : patterns) out << p << "\n";
+    out.close();
     return true;
 }
 
@@ -358,7 +451,7 @@ int main(int argc, char **argv) {
     }
 #endif
 
-    // === ResultStore (SQLCipher) init + legacy migration ===
+    // === ResultStore (SQLCipher) init + legacy migrations ===
     {
       std::string dbPath = deriveDbPath(outputFile);
       if (!g_resultStore.open(dbPath, g_resultKey)) {
@@ -368,11 +461,25 @@ int main(int argc, char **argv) {
         return 1;
       }
       std::cout << "📦 结果库: " << dbPath
-                << " (现有 " << g_resultStore.count() << " 条记录)" << std::endl;
-      // One-shot migration of legacy openssl-encrypted result.txt → SQLCipher.
+                << " (现有 " << g_resultStore.count() << " 条记录, "
+                << g_resultStore.rulesCount() << " 条规则)" << std::endl;
       if (!outputFile.empty()) {
         migrateLegacyResult(outputFile, g_resultKey);
       }
+      migrateLegacyTgConfig("tg_config.txt");
+      migrateLegacyProfanity("profanity.txt");
+
+      // CLI args win; otherwise pull from DB config.
+      if (tgToken.empty()) tgToken = g_resultStore.getConfig("TG_TOKEN");
+      if (g_tgChat.empty()) g_tgChat = g_resultStore.getConfig("TG_CHAT_ID");
+      // Conversely: if CLI provided TG creds and DB doesn't have them yet, persist.
+      if (!tgToken.empty() && g_resultStore.getConfig("TG_TOKEN").empty())
+          g_resultStore.setConfig("TG_TOKEN", tgToken);
+      if (!g_tgChat.empty() && g_resultStore.getConfig("TG_CHAT_ID").empty())
+          g_resultStore.setConfig("TG_CHAT_ID", g_tgChat);
+
+      // Engine still reads profanity.txt — keep it in sync with DB on every start.
+      writeProfanityTxtFromDb();
     }
 
     if (tgToken.empty()) {
@@ -549,15 +656,20 @@ int main(int argc, char **argv) {
                     g_tgBot->sendMessage(chatId, "⚠️ 引擎未运转");
                 }
             } else if (data == "cmd_result") {
-                if (!outputFile.empty()) {
-                    std::ifstream rf(outputFile);
-                    if(rf.is_open()){
-                        std::string content((std::istreambuf_iterator<char>(rf)), std::istreambuf_iterator<char>());
-                        if (content.length() > 3000) content = content.substr(content.length() - 3000);
-                        g_tgBot->sendMessage(chatId, "🏆 *爆号结果:*\n`" + content + "`");
-                    } else {
-                        g_tgBot->sendMessage(chatId, "尚未爆出结果。");
+                std::vector<ResultEntry> rows = g_resultStore.recent(10);
+                int total = g_resultStore.count();
+                if (rows.empty()) {
+                    g_tgBot->sendMessage(chatId, "暂无爆卡结果，让子弹再飞一会。");
+                } else {
+                    std::string body;
+                    for (auto it = rows.rbegin(); it != rows.rend(); ++it) {
+                        body += "#" + std::to_string(it->id) + "  " + it->address + "\n";
                     }
+                    g_tgBot->sendMessage(chatId,
+                        "🏆 *最近 " + std::to_string(rows.size()) + " 个爆号地址*"
+                        " (库内共 " + std::to_string(total) + " 条):\n"
+                        "`" + body + "`\n"
+                        "_私钥仅在服务器，执行 `tron -r <编号>` 扫码导入_");
                 }
             } else if (data == "cmd_rule") {
                 g_tgBot->sendRuleMenu(chatId);
@@ -571,14 +683,18 @@ int main(int argc, char **argv) {
                     content = "TTTTTTTTTT1111111111\nTTTTTTTTTT2222222222\nTTTTTTTTTT3333333333\nTTTTTTTTTT4444444444\nTTTTTTTTTT5555555555\nTTTTTTTTTT6666666666\nTTTTTTTTTT7777777777\nTTTTTTTTTT8888888888\nTTTTTTTTTT9999999999\nTTTTTTTTTTAAAAAAAAAA\nTTTTTTTTTTBBBBBBBBBB\nTTTTTTTTTTCCCCCCCCCC\nTTTTTTTTTTDDDDDDDDDD\nTTTTTTTTTTEEEEEEEEEE\nTTTTTTTTTTFFFFFFFFFF\nTTTTTTTTTTGGGGGGGGGG\nTTTTTTTTTTHHHHHHHHHH\nTTTTTTTTTTJJJJJJJJJJ\nTTTTTTTTTTKKKKKKKKKK\nTTTTTTTTTTLLLLLLLLLL\nTTTTTTTTTTMMMMMMMMMM\nTTTTTTTTTTNNNNNNNNNN\nTTTTTTTTTTPPPPPPPPPP\nTTTTTTTTTTQQQQQQQQQQ\nTTTTTTTTTTRRRRRRRRRR\nTTTTTTTTTTSSSSSSSSSS\nTTTTTTTTTTTTTTTTTTTT\nTTTTTTTTTTUUUUUUUUUU\nTTTTTTTTTTVVVVVVVVVV\nTTTTTTTTTTWWWWWWWWWW\nTTTTTTTTTTXXXXXXXXXX\nTTTTTTTTTTYYYYYYYYYY\nTTTTTTTTTTZZZZZZZZZZ\n";
                 }
                 
-                std::ofstream out("profanity.txt", std::ios::trunc);
-                if (out.is_open()) {
-                    out << content;
-                    out.close();
+                // Split content into pattern lines, persist to DB, then regen profanity.txt.
+                std::vector<std::string> patterns;
+                std::istringstream iss(content);
+                std::string line;
+                while (std::getline(iss, line)) {
+                    if (!line.empty()) patterns.push_back(line);
+                }
+                if (g_resultStore.replaceRules(patterns) && writeProfanityTxtFromDb()) {
                     g_tgBot->sendMessage(chatId, "✅ *规则已切换* — 请选择匹配难度：");
                     g_tgBot->sendStartMenu(chatId);
                 } else {
-                    g_tgBot->sendMessage(chatId, "⚠️ 写入规则文件失败！");
+                    g_tgBot->sendMessage(chatId, "⚠️ 写入规则失败: " + g_resultStore.lastError());
                 }
             } else if (data == "cmd_start") {
                 g_tgBot->sendStartMenu(chatId);
@@ -640,27 +756,29 @@ int main(int argc, char **argv) {
                  if (g_dispatcher) { g_dispatcher->stop(); was = true; }
                  g_tgBot->sendMessage(chatId, was ? "🛑 强制刹车成功！" : "⚠️ 引擎目前并未启动。");
              } else {
-                 std::ofstream out("profanity.txt", std::ios::trunc);
-                 if (out.is_open()) {
-                     std::istringstream stream(text);
-                     std::string line;
-                     while (std::getline(stream, line)) {
-                         line.erase(line.find_last_not_of(" \n\r\t") + 1);
-                         line.erase(0, line.find_first_not_of(" \n\r\t"));
-                         if (line.empty()) continue;
-                         if (line.find("run_") == 0) continue; // safety filter
-                         if (line.size() < 34) {
-                             line.append(34 - line.size(), '1');
-                         } else if (line.size() > 34) {
-                             line = line.substr(0, 34);
-                         }
-                         out << line << "\n";
+                 // Freeform custom rules: parse, normalize, persist to DB, regen profanity.txt.
+                 std::vector<std::string> patterns;
+                 std::istringstream stream(text);
+                 std::string line;
+                 while (std::getline(stream, line)) {
+                     line.erase(line.find_last_not_of(" \n\r\t") + 1);
+                     line.erase(0, line.find_first_not_of(" \n\r\t"));
+                     if (line.empty()) continue;
+                     if (line.find("run_") == 0) continue; // safety filter
+                     if (line.size() < 34) {
+                         line.append(34 - line.size(), '1');
+                     } else if (line.size() > 34) {
+                         line = line.substr(0, 34);
                      }
-                     out.close();
+                     patterns.push_back(line);
+                 }
+                 if (patterns.empty()) {
+                     g_tgBot->sendMessage(chatId, "⚠️ 未识别到有效规则。");
+                 } else if (g_resultStore.replaceRules(patterns) && writeProfanityTxtFromDb()) {
                      g_tgBot->sendMessage(chatId, "✅ *自定义规则表已更新覆写！*\n您现在可以点击菜单栏的【🚀 启动挂机】来应用您专属的长地址/多地址规则了。");
                      g_tgBot->sendStartMenu(chatId);
                  } else {
-                     g_tgBot->sendMessage(chatId, "⚠️ 写入规则文件失败，请检查服务器权限。");
+                     g_tgBot->sendMessage(chatId, "⚠️ 写入规则失败: " + g_resultStore.lastError());
                  }
              }
         });
