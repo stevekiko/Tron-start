@@ -209,8 +209,12 @@ case "$1" in
         # Escape single quotes for SQL string literal.
         DB_KEY_ESC="${DB_KEY//\'/\'\'}"
 
+        # Helper: run a SQL query, stripping the "ok" line that sqlcipher emits
+        # for the PRAGMA key acknowledgement.
+        sqc() { sqlcipher "$RESULT_DB" "PRAGMA key='${DB_KEY_ESC}'; $1" 2>/dev/null | grep -v '^ok$'; }
+
         # Test the key + count rows.
-        TOTAL=$(sqlcipher "$RESULT_DB" "PRAGMA key='${DB_KEY_ESC}'; SELECT count(*) FROM results;" 2>/dev/null)
+        TOTAL=$(sqc "SELECT count(*) FROM results;")
         if [[ ! "$TOTAL" =~ ^[0-9]+$ ]]; then
             echo "❌ 解锁数据库失败 — 密码错误或文件损坏。"
             exit 1
@@ -223,7 +227,7 @@ case "$1" in
         # Direct mode: tron -r N → QR for record id=N
         DIRECT_ID="$2"
         if [[ "$DIRECT_ID" =~ ^[0-9]+$ ]]; then
-            ROW=$(sqlcipher -separator $'\t' "$RESULT_DB" "PRAGMA key='${DB_KEY_ESC}'; SELECT private_key, address FROM results WHERE id = $DIRECT_ID;" 2>/dev/null)
+            ROW=$(sqlcipher -separator $'\t' "$RESULT_DB" "PRAGMA key='${DB_KEY_ESC}'; SELECT private_key, address FROM results WHERE id = $DIRECT_ID;" 2>/dev/null | grep -v '^ok$')
             if [ -z "$ROW" ]; then
                 echo "❌ 找不到记录 #$DIRECT_ID"
                 exit 1
@@ -242,6 +246,7 @@ case "$1" in
         echo "🏆 最近 10 个爆号 (库内共 $TOTAL 条，私钥已隐藏):"
         sqlcipher -separator '|' "$RESULT_DB" \
             "PRAGMA key='${DB_KEY_ESC}'; SELECT id, address FROM (SELECT id, address FROM results ORDER BY id DESC LIMIT 10) ORDER BY id ASC;" 2>/dev/null \
+            | grep -v '^ok$' \
             | while IFS='|' read -r ID ADDR; do
                 printf "  #%-4s %s\n" "$ID" "$ADDR"
             done
@@ -256,7 +261,7 @@ case "$1" in
         echo ""
         read -p "📱 输入编号查看私钥二维码 (回车跳过): " IDX
         if [[ "$IDX" =~ ^[0-9]+$ ]]; then
-            ROW=$(sqlcipher -separator $'\t' "$RESULT_DB" "PRAGMA key='${DB_KEY_ESC}'; SELECT private_key, address FROM results WHERE id = $IDX;" 2>/dev/null)
+            ROW=$(sqlcipher -separator $'\t' "$RESULT_DB" "PRAGMA key='${DB_KEY_ESC}'; SELECT private_key, address FROM results WHERE id = $IDX;" 2>/dev/null | grep -v '^ok$')
             if [ -z "$ROW" ]; then
                 echo "❌ 找不到记录 #$IDX"
             else
