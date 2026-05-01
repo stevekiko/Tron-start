@@ -517,14 +517,44 @@ int main(int argc, char **argv) {
                      g_tgBot->sendMessage(chatId, "⚠️ 引擎未运转");
                  }
              } else if (text == "🏆 查结果") {
-                 std::ifstream rf("result.txt");
-                 if (rf.is_open()) {
-                     std::string content((std::istreambuf_iterator<char>(rf)), std::istreambuf_iterator<char>());
-                     if (content.empty()) content = "暂无结果";
-                     if (content.length() > 3000) content = content.substr(content.length() - 3000);
-                     g_tgBot->sendMessage(chatId, "🏆 *爆号结果:*\n`" + content + "`");
-                 } else {
+                 std::ifstream rf("result.txt", std::ios::binary);
+                 if (!rf.is_open()) {
                      g_tgBot->sendMessage(chatId, "尚未爆出结果。");
+                 } else {
+                     // Detect AES encryption (openssl Salted__ magic header)
+                     char magic[8] = {0};
+                     rf.read(magic, 8);
+                     bool isEncrypted = (rf.gcount() == 8 && std::memcmp(magic, "Salted__", 8) == 0);
+
+                     if (isEncrypted) {
+                         g_tgBot->sendMessage(chatId,
+                             "🔐 *结果文件已加密*\n\n"
+                             "出于安全考虑，私钥不会经 Telegram 推送。\n"
+                             "请在服务器执行 `tron -r` 输入密码后，按编号扫描私钥二维码导入钱包。");
+                     } else {
+                         // Plaintext mode: only broadcast addresses, never private keys.
+                         rf.seekg(0, std::ios::beg);
+                         std::string line;
+                         std::vector<std::string> addrs;
+                         while (std::getline(rf, line)) {
+                             if (line.empty()) continue;
+                             size_t comma = line.find(',');
+                             addrs.push_back(comma != std::string::npos ? line.substr(comma + 1) : line);
+                         }
+                         if (addrs.empty()) {
+                             g_tgBot->sendMessage(chatId, "暂无结果。");
+                         } else {
+                             size_t start = addrs.size() > 10 ? addrs.size() - 10 : 0;
+                             std::string body;
+                             for (size_t i = start; i < addrs.size(); ++i) {
+                                 body += "[" + std::to_string(i - start + 1) + "] " + addrs[i] + "\n";
+                             }
+                             g_tgBot->sendMessage(chatId,
+                                 "🏆 *最近 " + std::to_string(addrs.size() - start) + " 个爆号地址:*\n"
+                                 "`" + body + "`\n"
+                                 "_(私钥仅在服务器；执行 `tron -r` 扫码导入)_");
+                         }
+                     }
                  }
              } else if (text == "🔴 紧急停止") {
                  std::lock_guard<std::mutex> lock(g_cmdMutex);
