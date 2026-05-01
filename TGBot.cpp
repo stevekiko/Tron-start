@@ -158,6 +158,9 @@ void TGBot::sendStartMenu(long long chatId) {
         {"reply_markup", {
             {"inline_keyboard", nlohmann::json::array({
                 nlohmann::json::array({
+                    {{"text", "💨 匹配 5 位极品后缀 (秒出)"}, {"callback_data", "run_0_5"}}
+                }),
+                nlohmann::json::array({
                     {{"text", "🎲 匹配 6 位极品后缀 (极快)"}, {"callback_data", "run_0_6"}}
                 }),
                 nlohmann::json::array({
