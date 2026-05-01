@@ -525,18 +525,57 @@ int main(int argc, char **argv) {
                      char magic[8] = {0};
                      rf.read(magic, 8);
                      bool isEncrypted = (rf.gcount() == 8 && std::memcmp(magic, "Salted__", 8) == 0);
+                     rf.close();
+
+                     std::string plaintext;
+                     bool decryptedOK = true;
 
                      if (isEncrypted) {
-                         g_tgBot->sendMessage(chatId,
-                             "🔐 *结果文件已加密*\n\n"
-                             "出于安全考虑，私钥不会经 Telegram 推送。\n"
-                             "请在服务器执行 `tron -r` 输入密码后，按编号扫描私钥二维码导入钱包。");
+                         if (g_resultKey.empty()) {
+                             g_tgBot->sendMessage(chatId, "🔐 结果已加密，但 daemon 未配置 result-key，无法解密展示地址。");
+                             decryptedOK = false;
+                         } else {
+                             // Write password to a 0600 temp file, then decrypt via popen.
+                             // Avoids embedding password in argv (visible in ps).
+                             char passPath[] = "/tmp/.tron_pass_XXXXXX";
+                             int pfd = mkstemp(passPath);
+                             if (pfd < 0) {
+                                 g_tgBot->sendMessage(chatId, "⚠️ 无法创建解密临时文件");
+                                 decryptedOK = false;
+                             } else {
+                                 FILE* pf = fdopen(pfd, "w");
+                                 if (pf) {
+                                     fputs(g_resultKey.c_str(), pf);
+                                     fclose(pf);
+                                 }
+                                 std::string cmd = "openssl enc -d -aes-256-cbc -pbkdf2 -in result.txt -pass file:"
+                                     + std::string(passPath) + " 2>/dev/null";
+                                 FILE* p = popen(cmd.c_str(), "r");
+                                 if (p) {
+                                     char buf[4096];
+                                     while (fgets(buf, sizeof(buf), p)) plaintext += buf;
+                                     pclose(p);
+                                 }
+                                 std::remove(passPath);
+                                 if (plaintext.empty()) {
+                                     g_tgBot->sendMessage(chatId, "⚠️ 解密失败 — 请检查 daemon 的 --result-key 是否与文件密码一致");
+                                     decryptedOK = false;
+                                 }
+                             }
+                         }
                      } else {
-                         // Plaintext mode: only broadcast addresses, never private keys.
-                         rf.seekg(0, std::ios::beg);
-                         std::string line;
+                         std::ifstream pf("result.txt");
+                         std::ostringstream oss;
+                         oss << pf.rdbuf();
+                         plaintext = oss.str();
+                     }
+
+                     if (decryptedOK) {
+                         // Extract addresses only — never broadcast private keys via Telegram.
+                         std::istringstream iss(plaintext);
                          std::vector<std::string> addrs;
-                         while (std::getline(rf, line)) {
+                         std::string line;
+                         while (std::getline(iss, line)) {
                              if (line.empty()) continue;
                              size_t comma = line.find(',');
                              addrs.push_back(comma != std::string::npos ? line.substr(comma + 1) : line);
@@ -549,11 +588,14 @@ int main(int argc, char **argv) {
                              for (size_t i = start; i < addrs.size(); ++i) {
                                  body += "[" + std::to_string(i - start + 1) + "] " + addrs[i] + "\n";
                              }
+                             std::string lockTag = isEncrypted ? " 🔐" : "";
                              g_tgBot->sendMessage(chatId,
-                                 "🏆 *最近 " + std::to_string(addrs.size() - start) + " 个爆号地址:*\n"
+                                 "🏆 *最近 " + std::to_string(addrs.size() - start) + " 个爆号地址" + lockTag + ":*\n"
                                  "`" + body + "`\n"
-                                 "_(私钥仅在服务器；执行 `tron -r` 扫码导入)_");
+                                 "_私钥仅在服务器，执行 `tron -r` 扫码导入_");
                          }
+                         // Best-effort wipe of any decrypted plaintext from memory before drop.
+                         std::fill(plaintext.begin(), plaintext.end(), '\0');
                      }
                  }
              } else if (text == "🔴 紧急停止") {
