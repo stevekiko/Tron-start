@@ -214,6 +214,20 @@ case "$1" in
         # for the PRAGMA key acknowledgement.
         sqc() { sqlcipher "$RESULT_DB" "PRAGMA key='${DB_KEY_ESC}'; $1" 2>/dev/null | grep -v '^ok$'; }
 
+        # Helper: after showing a QR, ask whether to remove that record so the
+        # user keeps "已导入"/"未导入" mentally separated.  Default = no.
+        prompt_delete_after_qr() {
+            local id="$1"
+            echo ""
+            read -p "🗑️  已成功导入钱包? 删除此记录避免下次混淆 [y/N]: " ANS
+            if [[ "$ANS" =~ ^[Yy]$ ]]; then
+                sqc "DELETE FROM results WHERE id = $id;" >/dev/null
+                echo "✅ 已从库中删除 #$id"
+            else
+                echo "↩️  保留记录 #$id (下次 tron -r 仍可见)"
+            fi
+        }
+
         # Test the key + count rows.
         TOTAL=$(sqc "SELECT count(*) FROM results;")
         if [[ ! "$TOTAL" =~ ^[0-9]+$ ]]; then
@@ -239,7 +253,9 @@ case "$1" in
             echo "📲 用 TronLink / imToken 等钱包扫码导入私钥："
             printf '%s' "$PRIV" | qrencode -t UTF8 -m 1
             echo "⚠️  扫描完成后建议执行 'clear' 清屏防止窥屏"
-            unset PRIV ROW DB_KEY DB_KEY_ESC
+            unset PRIV ROW
+            prompt_delete_after_qr "$DIRECT_ID"
+            unset DB_KEY DB_KEY_ESC
             exit 0
         fi
 
@@ -274,6 +290,7 @@ case "$1" in
                 printf '%s' "$PRIV" | qrencode -t UTF8 -m 1
                 echo "⚠️  扫描完成后建议执行 'clear' 清屏防止窥屏"
                 unset PRIV ROW
+                prompt_delete_after_qr "$IDX"
             fi
         fi
         unset DB_KEY DB_KEY_ESC
