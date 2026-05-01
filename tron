@@ -198,13 +198,14 @@ case "$1" in
             exit 0
         fi
 
-        # Read SQLCipher key from tg_config.txt
-        if [ -f "$TG_CONFIG" ]; then
-            DB_KEY=$(grep "^RESULT_KEY=" "$TG_CONFIG" | sed -E "s/^RESULT_KEY=\"?([^\"]*)\"?$/\1/")
-        fi
+        # Always prompt for the password — never auto-read from tg_config.txt.
+        # Even though the daemon needs the key in plaintext to run, interactive
+        # private-key access requires "知识 + shell" 两个因子才能取出。
+        read -s -p "🔐 请输入数据库密码: " DB_KEY
+        echo ""
         if [ -z "$DB_KEY" ]; then
-            read -s -p "🔐 请输入数据库密码: " DB_KEY
-            echo ""
+            echo "❌ 密码不能为空。"
+            exit 1
         fi
         # Escape single quotes for SQL string literal.
         DB_KEY_ESC="${DB_KEY//\'/\'\'}"
