@@ -475,7 +475,8 @@ int main(int argc, char **argv) {
                 if (out.is_open()) {
                     out << content;
                     out.close();
-                    g_tgBot->sendMessage(chatId, "✅ *预选规则写入成功！*\n当前使用的底层规则库已切换为你刚选择的模式，请点击【🚀 启动挂机】来起飞。");
+                    g_tgBot->sendMessage(chatId, "✅ *规则已切换* — 请选择匹配难度：");
+                    g_tgBot->sendStartMenu(chatId);
                 } else {
                     g_tgBot->sendMessage(chatId, "⚠️ 写入规则文件失败！");
                 }
