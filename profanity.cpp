@@ -482,8 +482,9 @@ int main(int argc, char **argv) {
             } else if (data == "cmd_start") {
                 g_tgBot->sendStartMenu(chatId);
             } else if (data.find("run_") == 0) {
-                int p = data[4] - '0';
-                int s = data[6] - '0';
+                size_t sep = data.find('_', 4);
+                int p = std::stoi(data.substr(4, sep - 4));
+                int s = std::stoi(data.substr(sep + 1));
                 std::lock_guard<std::mutex> lock(g_cmdMutex);
                 if (g_dispatcher) g_dispatcher->stop();
                 g_cmdRule = "profanity.txt";  // FIX: Force default since matchingInput might be explicitly empty in daemon mode.

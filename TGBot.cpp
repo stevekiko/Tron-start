@@ -167,6 +167,12 @@ void TGBot::sendStartMenu(long long chatId) {
                     {{"text", "💎 匹配 8 位极品后缀 (耗时)"}, {"callback_data", "run_0_8"}}
                 }),
                 nlohmann::json::array({
+                    {{"text", "👑 匹配 9 位极品后缀 (终极)"}, {"callback_data", "run_0_9"}}
+                }),
+                nlohmann::json::array({
+                    {{"text", "🌋 匹配 10 位极品后缀 (神级)"}, {"callback_data", "run_0_10"}}
+                }),
+                nlohmann::json::array({
                     {{"text", "🔥 前缀1位 + 后缀8位 (地狱爆率)"}, {"callback_data", "run_1_8"}}
                 })
             })}
